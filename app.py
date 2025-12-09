@@ -16,7 +16,8 @@ OUTPUT_MAP_PATH = "generated_map.html"
 with st.sidebar:
     st.header("Data Upload")
     excel_file = st.file_uploader("Upload Excel File (.xlsx)", type=["xlsx", "xls"])
-    kmz_file = st.file_uploader("Upload KMZ File (.kmz)", type=["kmz"])
+    # Added 'zip' to allowed types because iOS/Safari often doesn't recognize 'kmz'
+    kmz_file = st.file_uploader("Upload KMZ File (.kmz)", type=["kmz", "zip"], help="On mobile, you may need to rename .kmz to .zip if the file is greyed out.")
     
     generate_btn = st.button("Generate Map", type="primary")
 
@@ -89,7 +90,3 @@ if generate_btn:
                 st.exception(e)
 else:
     st.info("Upload files and click 'Generate Map' to start.")
-
-
-
-
