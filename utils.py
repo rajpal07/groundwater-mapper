@@ -29,7 +29,16 @@ def init_earth_engine():
         if "EARTHENGINE_TOKEN" in st.secrets:
             print("Using Service Account from Streamlit Secrets...")
             # Parse the JSON string from secrets
-            service_account_info = json.loads(st.secrets["EARTHENGINE_TOKEN"])
+            # strict=False allows control characters (like newlines) inside strings, 
+            # which fixes common copy-paste errors in the private key.
+            token_str = st.secrets["EARTHENGINE_TOKEN"]
+            service_account_info = json.loads(token_str, strict=False)
+            
+            # CRITICAL: Remove the token from environment variables.
+            # 'geemap' automatically tries to read this env var and often crashes if the format isn't perfect.
+            # Since we are handling authentication manually below, we hide it from geemap.
+            if "EARTHENGINE_TOKEN" in os.environ:
+                os.environ.pop("EARTHENGINE_TOKEN")
             
             # Create credentials
             credentials = Credentials.from_service_account_info(service_account_info)
