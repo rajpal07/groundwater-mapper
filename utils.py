@@ -466,7 +466,7 @@ def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_
         bounds=image_bounds,
         opacity=0.7,
         interactive=False,
-        cross_origin=False,
+        cross_origin=True,
         zindex=1,
         name="Groundwater Contour"
     ).add_to(m)
@@ -813,6 +813,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
                   // allowTaint: true, // REMOVED: Can cause security errors or blank images
                   backgroundColor: '#ffffff',
                   cacheBust: true, // Force reload images
+                  pixelRatio: 1, // Force 1x resolution to avoid huge canvases on mobile
                   filter: (node) => {{
                       // Keep all nodes
                       return true; 
