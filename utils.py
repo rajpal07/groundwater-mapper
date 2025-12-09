@@ -800,60 +800,107 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
       const m = findMap();
       if (!m) return;
       
-      setTimeout(() => {{
-          // Hide standard Leaflet controls (Zoom, Layers, etc.)
-          const leafletControls = document.querySelector('.leaflet-control-container');
-          if (leafletControls) leafletControls.style.display = 'none';
+      const btn = document.getElementById('btn-snapshot');
+      if (btn) {{
+          btn.disabled = true;
+          btn.innerHTML = '📸 Processing...';
+          btn.style.opacity = '0.7';
+      }}
 
-          // Hide custom controls (excluding compass and legend)
-          const controls = document.querySelectorAll('div[style*="z-index:9999"]');
+      // Hide standard Leaflet controls (Zoom, Layers, etc.)
+      const leafletControls = document.querySelector('.leaflet-control-container');
+      if (leafletControls) leafletControls.style.display = 'none';
+
+      // Hide custom controls (excluding compass and legend)
+      const controls = document.querySelectorAll('div[style*="z-index:9999"]');
+      controls.forEach(ctrl => {{
+          if (ctrl.id !== 'compass' && ctrl.id !== 'map-legend') {{
+              ctrl.style.display = 'none';
+          }}
+      }});
+      
+      const mapContainer = m.getContainer();
+      
+      // Options for html-to-image
+      const options = {{
+          width: mapContainer.offsetWidth,
+          height: mapContainer.offsetHeight,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          cacheBust: true,
+          pixelRatio: 1, 
+          filter: (node) => true
+      }};
+
+      // Helper: Restore UI
+      const restoreUI = () => {{
+          if (leafletControls) leafletControls.style.display = 'block';
           controls.forEach(ctrl => {{
-              if (ctrl.id !== 'compass' && ctrl.id !== 'map-legend') {{
-                  ctrl.style.display = 'none';
-              }}
+              ctrl.style.display = 'block';
           }});
-          
-          const mapContainer = m.getContainer();
-          
-          // Wait a bit for any map rendering/flicker to settle
-          setTimeout(() => {{
-              htmlToImage.toPng(mapContainer, {{
-                  width: mapContainer.offsetWidth,
-                  height: mapContainer.offsetHeight,
-                  useCORS: true,
-                  // allowTaint: true, // REMOVED: Can cause security errors or blank images
-                  backgroundColor: '#ffffff',
-                  cacheBust: true, // Force reload images
-                  pixelRatio: 1, // Force 1x resolution to avoid huge canvases on mobile
-                  filter: (node) => {{
-                      // Keep all nodes
-                      return true; 
-                  }}
-              }})
-              .then(function (dataUrl) {{
-                  const link = document.createElement('a');
-                  link.download = 'map_snapshot.png';
-                  link.href = dataUrl;
-                  link.click();
+          if (btn) {{
+            btn.disabled = false;
+            btn.innerHTML = '📸 Snapshot';
+            btn.style.opacity = '1.0';
+          }}
+      }};
+
+      // STRATEGY: Double Snapshot
+      // 1. First "Warm-up" Snapshot (Often blank/incomplete on mobile)
+      // 2. Wait
+      // 3. Second "Real" Snapshot
+      
+      setTimeout(() => {{
+          // 1. Warm-up (Discard result)
+          console.log("Starting Warm-up Snapshot...");
+          htmlToImage.toPng(mapContainer, options)
+          .then(() => {{
+              console.log("Warm-up complete. Waiting...");
+              
+              // 2. Wait for cache/rasterization
+              setTimeout(() => {{
                   
-                  // Restore controls
-                  if (leafletControls) leafletControls.style.display = 'block';
-                  controls.forEach(ctrl => {{
-                      ctrl.style.display = 'block';
+                  // 3. Real Snapshot
+                  console.log("Taking Real Snapshot...");
+                  htmlToImage.toPng(mapContainer, options)
+                  .then(function (dataUrl) {{
+                      const link = document.createElement('a');
+                      link.download = 'map_snapshot.png';
+                      link.href = dataUrl;
+                      link.click();
+                      restoreUI();
+                  }})
+                  .catch(function (error) {{
+                      console.error('Real Snapshot failed:', error);
+                      alert('Snapshot failed. See console.');
+                      restoreUI();
                   }});
-              }})
-              .catch(function (error) {{
-                  console.error('Snapshot failed:', error);
-                  alert('Snapshot failed. See console.');
                   
-                  // Restore controls on error
-                  if (leafletControls) leafletControls.style.display = 'block';
-                  controls.forEach(ctrl => {{
-                      ctrl.style.display = 'block';
-                  }});
-              }});
-          }}, 1000); // Increased timeout to 1000ms to ensure layers (contours) are fully rendered
-      }}, 500);
+              }}, 1000); // Wait 1s between snapshots
+          }})
+          .catch(function (error) {{
+              // Even if warm-up fails, try the real one? 
+              // Usually if warm-up fails, it might be a partial render. 
+              // Let's log and try proceeding carefully or just alert.
+              console.warn('Warm-up Snapshot failed:', error);
+              
+              setTimeout(() => {{
+                   htmlToImage.toPng(mapContainer, options)
+                   .then(function (dataUrl) {{
+                      const link = document.createElement('a');
+                      link.download = 'map_snapshot.png';
+                      link.href = dataUrl;
+                      link.click();
+                      restoreUI();
+                   }})
+                   .catch(err => {{
+                       console.error('Fallback Snapshot failed:', err);
+                       alert('Snapshot failed.');
+                       restoreUI();
+                   }});
+              }}, 1000);
+          }});
+      }}, 500); // Initial delay
   }};
 
   // --- Interactive Dots Logic ---
