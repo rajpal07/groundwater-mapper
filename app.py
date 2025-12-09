@@ -10,8 +10,8 @@ st.markdown("""
 Upload your Excel data and KMZ file to generate an interactive groundwater contour map.
 """)
 
-# Output path for the generated map - use absolute path
-OUTPUT_MAP_PATH = r"d:\anirudh_kahn\adi_version\generated_map.html"
+# Output path - use relative path for cloud compatibility
+OUTPUT_MAP_PATH = "generated_map.html"
 
 with st.sidebar:
     st.header("Data Upload")
@@ -52,7 +52,7 @@ if generate_btn:
                 )
                 
                 st.write(f"✅ Excel processed: {len(target_points)} target points found")
-                st.write(f"📍 Image bounds: {image_bounds}")
+                # st.write(f"📍 Image bounds: {image_bounds}")
                 
                 st.write("🗺️ Creating map...")
                 # Create Map
@@ -60,17 +60,29 @@ if generate_btn:
                 
                 # Save map to file
                 m.save(OUTPUT_MAP_PATH)
-                st.write(f"💾 Map saved to: {OUTPUT_MAP_PATH}")
+                st.write(f"💾 Map saved")
                 
                 # Inject controls AFTER saving (this is required for geemap compatibility)
                 utils.inject_controls_to_html(OUTPUT_MAP_PATH, image_bounds, target_points, kmz_points)
                 st.write("✅ Controls and points injected successfully")
                 
-                st.success("Map generated successfully! Opening in new tab...")
+                st.success("Map generated successfully!")
                 
-                # Open in new browser tab - use file:// URL format
-                file_url = "file:///" + OUTPUT_MAP_PATH.replace("\\", "/")
-                webbrowser.open(file_url, new=2)  # new=2 opens in a new tab
+                # --- Display Map in Streamlit ---
+                # Read the HTML file
+                with open(OUTPUT_MAP_PATH, 'r', encoding='utf-8') as f:
+                    map_html = f.read()
+
+                # Display download button
+                st.download_button(
+                    label="📥 Download Map (HTML)",
+                    data=map_html,
+                    file_name="groundwater_map.html",
+                    mime="text/html"
+                )
+
+                # Embed the map
+                st.components.v1.html(map_html, height=800, scrolling=True)
                 
             except Exception as e:
                 st.error(f"An error occurred: {e}")
