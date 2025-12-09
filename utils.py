@@ -803,8 +803,11 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
           htmlToImage.toPng(mapContainer, {{
               width: mapContainer.offsetWidth,
               height: mapContainer.offsetHeight,
+              useCORS: true,
+              allowTaint: true,
+              backgroundColor: '#ffffff',
               filter: (node) => {{
-                  // Exclude any cross-origin images if they cause issues (optional)
+                  // Keep all nodes
                   return true; 
               }}
           }})
