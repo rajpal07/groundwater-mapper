@@ -11,6 +11,8 @@ from pykml import parser
 from shapely.geometry import Point, box, mapping
 import geopandas as gpd
 import ee
+import streamlit as st
+from google.oauth2.service_account import Credentials
 import geemap.foliumap as geemap
 import folium
 from folium.raster_layers import ImageOverlay
@@ -23,12 +25,31 @@ GEE_PROJECT_ID = 'geekahn'
 def init_earth_engine():
     """Initialize Google Earth Engine."""
     try:
-        ee.Initialize(project=GEE_PROJECT_ID)
-        print("Google Earth Engine initialized successfully!")
-        return True
+        # Try to use Streamlit Secrets for Service Account (Cloud Deployment)
+        if "EARTHENGINE_TOKEN" in st.secrets:
+            print("Using Service Account from Streamlit Secrets...")
+            # Parse the JSON string from secrets
+            service_account_info = json.loads(st.secrets["EARTHENGINE_TOKEN"])
+            
+            # Create credentials
+            credentials = Credentials.from_service_account_info(service_account_info)
+            
+            # Initialize with credentials
+            ee.Initialize(credentials=credentials, project=GEE_PROJECT_ID)
+            print("Google Earth Engine initialized successfully (Service Account)!")
+            return True
+            
+        # Fallback to local authentication (Development)
+        else:
+            print("No Service Account token found. Trying default authentication...")
+            ee.Initialize(project=GEE_PROJECT_ID)
+            print("Google Earth Engine initialized successfully (Local)!")
+            return True
+            
     except Exception as e:
         print(f"Warning: Could not initialize Earth Engine: {e}")
-        print("Please ensure you have authenticated with 'earthengine authenticate'")
+        print("For cloud deployment, please ensure 'EARTHENGINE_TOKEN' is set in Streamlit Secrets.")
+        print("For local development, run 'earthengine authenticate' in your terminal.")
         return False
 
 # Initialize GEE on import

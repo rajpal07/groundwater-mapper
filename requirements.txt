@@ -11,3 +11,4 @@ lxml
 openpyxl
 pyproj
 geemap
+google-auth
