@@ -559,7 +559,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
   <div>
     <button onclick="resetImageBounds()" style="background:#ff6b6b; color:white; margin-bottom:5px;">🔁 Reset</button>
     <br>
-    <button onclick="takeSnapshot()" style="background:#4CAF50; color:white; padding: 5px 10px; cursor:pointer;">📸 Snapshot</button>
+    <button id="btn-snapshot" onclick="takeSnapshot()" disabled style="background:#4CAF50; color:white; padding: 5px 10px; cursor:not-allowed; opacity:0.6;">⏳ Loading...</button>
   </div>
 </div>
 
@@ -721,6 +721,17 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     }}
 
     applyRotationTo(img);
+  }}
+
+  // --- Snapshot Button State ---
+  function enableSnapshotBtn() {{
+      const btn = document.getElementById('btn-snapshot');
+      if (btn) {{
+          btn.disabled = false;
+          btn.innerHTML = '📸 Snapshot';
+          btn.style.cursor = 'pointer';
+          btn.style.opacity = '1.0';
+      }}
   }}
 
   // --- Reapply to current overlay image (safe wrapper) ---
@@ -925,8 +936,17 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         }}
         
         // Overlay Events
-        ov.on('load', () => setTimeout(reapplyToOverlayImage, 0));
+        ov.on('load', () => {{
+            setTimeout(reapplyToOverlayImage, 0);
+            enableSnapshotBtn();
+        }});
         ov.on('update', () => setTimeout(reapplyToOverlayImage, 0));
+
+        // Check if already loaded
+        const img = (typeof ov.getElement === 'function') ? ov.getElement() : ov._image;
+        if (img && img.complete) {{
+            enableSnapshotBtn();
+        }}
     }}
 
     // Map Events
