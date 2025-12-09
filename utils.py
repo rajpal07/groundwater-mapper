@@ -790,9 +790,13 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
       if (!m) return;
       
       setTimeout(() => {{
+          // Hide standard Leaflet controls (Zoom, Layers, etc.)
+          const leafletControls = document.querySelector('.leaflet-control-container');
+          if (leafletControls) leafletControls.style.display = 'none';
+
+          // Hide custom controls (excluding compass and legend)
           const controls = document.querySelectorAll('div[style*="z-index:9999"]');
           controls.forEach(ctrl => {{
-              // Keep compass and legend visible
               if (ctrl.id !== 'compass' && ctrl.id !== 'map-legend') {{
                   ctrl.style.display = 'none';
               }}
@@ -800,34 +804,43 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
           
           const mapContainer = m.getContainer();
           
-          htmlToImage.toPng(mapContainer, {{
-              width: mapContainer.offsetWidth,
-              height: mapContainer.offsetHeight,
-              useCORS: true,
-              allowTaint: true,
-              backgroundColor: '#ffffff',
-              filter: (node) => {{
-                  // Keep all nodes
-                  return true; 
-              }}
-          }})
-          .then(function (dataUrl) {{
-              const link = document.createElement('a');
-              link.download = 'map_snapshot.png';
-              link.href = dataUrl;
-              link.click();
-              
-              controls.forEach(ctrl => {{
-                  ctrl.style.display = 'block';
+          // Wait a bit for any map rendering/flicker to settle
+          setTimeout(() => {{
+              htmlToImage.toPng(mapContainer, {{
+                  width: mapContainer.offsetWidth,
+                  height: mapContainer.offsetHeight,
+                  useCORS: true,
+                  // allowTaint: true, // REMOVED: Can cause security errors or blank images
+                  backgroundColor: '#ffffff',
+                  cacheBust: true, // Force reload images
+                  filter: (node) => {{
+                      // Keep all nodes
+                      return true; 
+                  }}
+              }})
+              .then(function (dataUrl) {{
+                  const link = document.createElement('a');
+                  link.download = 'map_snapshot.png';
+                  link.href = dataUrl;
+                  link.click();
+                  
+                  // Restore controls
+                  if (leafletControls) leafletControls.style.display = 'block';
+                  controls.forEach(ctrl => {{
+                      ctrl.style.display = 'block';
+                  }});
+              }})
+              .catch(function (error) {{
+                  console.error('Snapshot failed:', error);
+                  alert('Snapshot failed. See console.');
+                  
+                  // Restore controls on error
+                  if (leafletControls) leafletControls.style.display = 'block';
+                  controls.forEach(ctrl => {{
+                      ctrl.style.display = 'block';
+                  }});
               }});
-          }})
-          .catch(function (error) {{
-              console.error('Snapshot failed:', error);
-              alert('Snapshot failed. See console.');
-              controls.forEach(ctrl => {{
-                  ctrl.style.display = 'block';
-              }});
-          }});
+          }}, 1000); // Increased timeout to 1000ms to ensure layers (contours) are fully rendered
       }}, 500);
   }};
 
