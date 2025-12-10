@@ -539,7 +539,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.js"></script>
 
 <!-- Compass UI -->
-<div id="compass" style="position:absolute; bottom:10px; left:10px; z-index:9999; width:80px; height:80px; cursor:pointer;" title="Click to reset rotation">
+<div id="compass" style="position:absolute; top:80px; left:10px; z-index:9999; width:80px; height:80px; cursor:pointer;" title="Click to reset rotation">
     <div id="compassInner" style="position:relative; width:100%; height:100%; background:rgba(0,0,0,0.6); border-radius:50%; border:3px solid white; box-shadow:0 2px 8px rgba(0,0,0,0.3); transition: transform 0.3s ease;">
         <!-- Simple North Arrow -->
         <div style="position:absolute; bottom:10px; left:50%; transform:translateX(-50%); width:6px; height:60%; background:rgba(255,255,255,0.8);"></div>
