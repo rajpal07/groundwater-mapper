@@ -453,8 +453,8 @@ def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_
     else:
         center_lat, center_lon = 0, 0
 
-    # Create GEE map with satellite basemap
-    m = geemap.Map(center=[center_lat, center_lon], zoom=16, basemap='SATELLITE', max_zoom=19)
+    # Create GEE map with satellite basemap - Controls disabled
+    m = geemap.Map(center=[center_lat, center_lon], zoom=16, basemap='SATELLITE', max_zoom=19, zoom_control=False, attributionControl=False)
     
     # Add layer control moved to end
 
@@ -485,7 +485,7 @@ def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_
         ).add_to(m)
 
     # Add layer control at the end to ensure all layers are initialized
-    folium.LayerControl().add_to(m)
+    # folium.LayerControl().add_to(m) # Disabled as per request
 
     # Note: Target points are added via JavaScript
     # in inject_controls_to_html() for full interactivity and geemap compatibility
