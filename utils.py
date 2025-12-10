@@ -336,16 +336,16 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
         method=interpolation_method
     )
 
-    # Fill NaNs
-    mask_nan = np.isnan(grid_z)
-    if np.any(mask_nan):
-        grid_z_nearest = griddata(
-            points=(df['Easting'], df['Northing']),
-            values=df['Groundwater Elevation mAHD'],
-            xi=(grid_x, grid_y),
-            method='nearest'
-        )
-        grid_z[mask_nan] = grid_z_nearest[mask_nan]
+    # Fill NaNs - COMMENTED OUT AS PER REQUEST (Breaking/Incorrect results)
+    # mask_nan = np.isnan(grid_z)
+    # if np.any(mask_nan):
+    #     grid_z_nearest = griddata(
+    #         points=(df['Easting'], df['Northing']),
+    #         values=df['Groundwater Elevation mAHD'],
+    #         xi=(grid_x, grid_y),
+    #         method='nearest'
+    #     )
+    #     grid_z[mask_nan] = grid_z_nearest[mask_nan]
 
     # Generate Contour Image
     dz_dx, dz_dy = np.gradient(grid_z)
