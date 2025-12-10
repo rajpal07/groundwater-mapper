@@ -515,6 +515,26 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     initial_center_json = json.dumps(initial_center)
 
     js_code = f"""
+<!-- Force Hide Leaflet Controls -->
+<style>
+/* Hide Zoom Control */
+.leaflet-control-zoom {{
+    display: none !important;
+}}
+/* Hide Layer Control */
+.leaflet-control-layers {{
+    display: none !important;
+}}
+/* Hide Attribution */
+.leaflet-control-attribution {{
+    display: none !important;
+}}
+/* Hide Draw Toolbar if present */
+.leaflet-draw {{
+    display: none !important;
+}}
+</style>
+
 <!-- html-to-image for snapshot -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.js"></script>
 
