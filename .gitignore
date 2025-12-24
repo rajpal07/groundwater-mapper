@@ -1,0 +1,42 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Test files
+test_*.py
+check_*.py
+debug_*.py
+verify_*.py
+
+# Generated/temporary files
+*.html
+generated_map.html
+test_map.html
+test_new_map.html
+
+# Data files (Excel and KMZ)
+*.xlsx
+*.xls
+*.kmz
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vercel
+.vercel

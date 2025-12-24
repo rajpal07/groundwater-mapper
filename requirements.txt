@@ -1,0 +1,14 @@
+streamlit
+pandas
+numpy
+scipy
+matplotlib
+geopandas
+shapely
+folium
+pykml
+lxml
+openpyxl
+pyproj
+geemap
+google-auth
