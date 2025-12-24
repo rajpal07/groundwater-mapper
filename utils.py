@@ -976,6 +976,45 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
       
       const mapContainer = m.getContainer();
       
+      // Helper: Wait for overlay image to be fully loaded
+      const waitForOverlayImage = () => {{
+          return new Promise((resolve) => {{
+              const ov = findOverlay();
+              if (!ov) {{
+                  console.warn('No overlay found, proceeding anyway');
+                  resolve();
+                  return;
+              }}
+              
+              const img = (typeof ov.getElement === 'function') ? ov.getElement() : ov._image;
+              if (!img) {{
+                  console.warn('No overlay image found, proceeding anyway');
+                  resolve();
+                  return;
+              }}
+              
+              if (img.complete && img.naturalHeight !== 0) {{
+                  console.log('Overlay image already loaded');
+                  resolve();
+              }} else {{
+                  console.log('Waiting for overlay image to load...');
+                  img.onload = () => {{
+                      console.log('Overlay image loaded');
+                      resolve();
+                  }};
+                  img.onerror = () => {{
+                      console.warn('Overlay image failed to load, proceeding anyway');
+                      resolve();
+                  }};
+                  // Timeout after 3 seconds
+                  setTimeout(() => {{
+                      console.warn('Overlay image load timeout, proceeding anyway');
+                      resolve();
+                  }}, 3000);
+              }}
+          }});
+      }};
+      
       // Options for html-to-image
       const options = {{
           width: mapContainer.offsetWidth,
@@ -1000,62 +1039,68 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
           }}
       }};
 
-      // STRATEGY: Double Snapshot
+      // STRATEGY: Wait for overlay + Double Snapshot
+      // 0. Wait for overlay image to load
       // 1. First "Warm-up" Snapshot (Often blank/incomplete on mobile)
       // 2. Wait
       // 3. Second "Real" Snapshot
       
-      setTimeout(() => {{
-          // 1. Warm-up (Discard result)
-          console.log("Starting Warm-up Snapshot...");
-          htmlToImage.toPng(mapContainer, options)
-          .then(() => {{
-              console.log("Warm-up complete. Waiting...");
-              
-              // 2. Wait for cache/rasterization (longer delay for mobile)
-              setTimeout(() => {{
+      // First, ensure overlay image is loaded
+      waitForOverlayImage().then(() => {{
+          console.log('Overlay ready, starting snapshot process...');
+          
+          setTimeout(() => {{
+              // 1. Warm-up (Discard result)
+              console.log("Starting Warm-up Snapshot...");
+              htmlToImage.toPng(mapContainer, options)
+              .then(() => {{
+                  console.log("Warm-up complete. Waiting...");
                   
-                  // 3. Real Snapshot
-                  console.log("Taking Real Snapshot...");
-                  htmlToImage.toPng(mapContainer, options)
-                  .then(function (dataUrl) {{
-                      const link = document.createElement('a');
-                      link.download = 'map_snapshot.png';
-                      link.href = dataUrl;
-                      link.click();
-                      restoreUI();
-                  }})
-                  .catch(function (error) {{
-                      console.error('Real Snapshot failed:', error);
-                      alert('Snapshot failed. See console.');
-                      restoreUI();
-                  }});
+                  // 2. Wait for cache/rasterization (longer delay for mobile)
+                  setTimeout(() => {{
+                      
+                      // 3. Real Snapshot
+                      console.log("Taking Real Snapshot...");
+                      htmlToImage.toPng(mapContainer, options)
+                      .then(function (dataUrl) {{
+                          const link = document.createElement('a');
+                          link.download = 'map_snapshot.png';
+                          link.href = dataUrl;
+                          link.click();
+                          restoreUI();
+                      }})
+                      .catch(function (error) {{
+                          console.error('Real Snapshot failed:', error);
+                          alert('Snapshot failed. See console.');
+                          restoreUI();
+                      }});
+                      
+                  }}, 2000); // Increased from 1s to 2s for mobile
+              }})
+              .catch(function (error) {{
+                  // Even if warm-up fails, try the real one? 
+                  // Usually if warm-up fails, it might be a partial render. 
+                  // Let's log and try proceeding carefully or just alert.
+                  console.warn('Warm-up Snapshot failed:', error);
                   
-              }}, 2000); // Increased from 1s to 2s for mobile
-          }})
-          .catch(function (error) {{
-              // Even if warm-up fails, try the real one? 
-              // Usually if warm-up fails, it might be a partial render. 
-              // Let's log and try proceeding carefully or just alert.
-              console.warn('Warm-up Snapshot failed:', error);
-              
-              setTimeout(() => {{
-                   htmlToImage.toPng(mapContainer, options)
-                   .then(function (dataUrl) {{
-                      const link = document.createElement('a');
-                      link.download = 'map_snapshot.png';
-                      link.href = dataUrl;
-                      link.click();
-                      restoreUI();
-                   }})
-                   .catch(err => {{
-                       console.error('Fallback Snapshot failed:', err);
-                       alert('Snapshot failed.');
-                       restoreUI();
-                   }});
-              }}, 2000); // Increased from 1s to 2s
-          }});
-      }}, 1000); // Increased from 500ms to 1s initial delay
+                  setTimeout(() => {{
+                       htmlToImage.toPng(mapContainer, options)
+                       .then(function (dataUrl) {{
+                          const link = document.createElement('a');
+                          link.download = 'map_snapshot.png';
+                          link.href = dataUrl;
+                          link.click();
+                          restoreUI();
+                       }})
+                       .catch(err => {{
+                           console.error('Fallback Snapshot failed:', err);
+                           alert('Snapshot failed.');
+                           restoreUI();
+                       }});
+                  }}, 2000); // Increased from 1s to 2s
+              }});
+          }}, 1000); // Increased from 500ms to 1s initial delay
+      }});
   }};
 
   // --- Interactive Dots Logic ---
