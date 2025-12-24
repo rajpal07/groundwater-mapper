@@ -368,7 +368,7 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     ax.contourf(grid_x, grid_y, grid_z, levels=contour_levels, cmap='viridis', alpha=0.6)
     ax.scatter(df['Easting'], df['Northing'], color='black', edgecolor='black', linewidth=0.8, s=40)
     
-    step = 10
+    step = 14  # Show ~50% of arrows
     ax.quiver(grid_x[::step, ::step], grid_y[::step, ::step], u[::step, ::step], v[::step, ::step], color='red', scale=25, width=0.002)
 
     # Bounding box (visual only for the image)
