@@ -634,13 +634,9 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
   <div style="font-weight:bold; margin-bottom:8px; border-bottom:1px solid #ddd; padding-bottom:4px;">Legend</div>
   
   <!-- Points -->
-  <div style="display:flex; align-items:center; margin-bottom:6px;">
-    <div style="width:12px; height:12px; background:#4A90E2; border-radius:50%; border:2px solid white; margin-right:8px; box-shadow:0 0 2px rgba(0,0,0,0.5);"></div>
-    <span>KMZ Points (Fixed)</span>
-  </div>
   <div style="display:flex; align-items:center; margin-bottom:10px;">
     <div style="width:12px; height:12px; background:#FF6B35; border-radius:50%; border:2px solid white; margin-right:8px; box-shadow:0 0 2px rgba(0,0,0,0.5);"></div>
-    <span>Borewell Points (Draggable)</span>
+    <span>Borewell Points</span>
   </div>
 
   <!-- Contour Guide -->
