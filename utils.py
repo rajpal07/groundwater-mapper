@@ -366,7 +366,10 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     fig, ax = plt.subplots(figsize=(12, 8), facecolor='none')
     ax.patch.set_alpha(0)
     
-    # Draw contour lines instead of filled contours
+    # Draw filled contours (colors) first
+    ax.contourf(grid_x, grid_y, grid_z, levels=contour_levels, cmap='viridis', alpha=0.6)
+    
+    # Draw contour lines on top (black lines with labels)
     contours = ax.contour(grid_x, grid_y, grid_z, levels=contour_levels, colors='black', linewidths=1.5, alpha=0.8)
     ax.clabel(contours, inline=True, fontsize=8, fmt='%1.1f')  # Add labels to contour lines
     
