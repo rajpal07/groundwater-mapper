@@ -368,7 +368,7 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     ax.contourf(grid_x, grid_y, grid_z, levels=contour_levels, cmap='viridis', alpha=0.6)
     ax.scatter(df['Easting'], df['Northing'], color='black', edgecolor='black', linewidth=0.8, s=40)
     
-    step = 14  # Show ~50% of arrows
+    step = 18  # Show ~30% of arrows
     ax.quiver(grid_x[::step, ::step], grid_y[::step, ::step], u[::step, ::step], v[::step, ::step], color='red', scale=25, width=0.002)
 
     # Bounding box (visual only for the image)
@@ -695,7 +695,15 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
       initialTop = rect.top;
       
       compass.style.cursor = 'grabbing';
+      
+      // Disable map dragging while dragging compass
+      const m = findMap();
+      if (m) {{
+        m.dragging.disable();
+      }}
+      
       e.preventDefault();
+      e.stopPropagation();
     }});
     
     document.addEventListener('mousemove', function(e) {{
@@ -715,6 +723,9 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         
         compass.style.left = newLeft + 'px';
         compass.style.top = newTop + 'px';
+        
+        e.preventDefault();
+        e.stopPropagation();
       }}
     }});
     
@@ -723,10 +734,21 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         isDragging = false;
         compass.style.cursor = 'move';
         
+        // Re-enable map dragging
+        const m = findMap();
+        if (m) {{
+          m.dragging.enable();
+        }}
+        
         // If it was a click (not a drag), reset rotation
         if (!hasMoved) {{
           currentRotation = 0;
           resetImageBounds();
+        }}
+        
+        if (hasMoved) {{
+          e.preventDefault();
+          e.stopPropagation();
         }}
       }}
     }});
