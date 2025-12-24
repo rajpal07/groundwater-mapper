@@ -677,18 +677,29 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     }}
   }}
 
-  // --- Compass Drag and Click Functionality ---
+  // --- Compass Drag and Click Functionality (Mouse + Touch Support) ---
   (function initCompassDrag() {{
     const compass = document.getElementById('compass');
     let isDragging = false;
     let hasMoved = false;
     let startX, startY, initialLeft, initialTop;
     
-    compass.addEventListener('mousedown', function(e) {{
+    // Helper to get coordinates from mouse or touch event
+    function getEventCoords(e) {{
+      if (e.touches && e.touches.length > 0) {{
+        return {{ x: e.touches[0].clientX, y: e.touches[0].clientY }};
+      }}
+      return {{ x: e.clientX, y: e.clientY }};
+    }}
+    
+    // Start drag (mouse or touch)
+    function handleStart(e) {{
       isDragging = true;
       hasMoved = false;
-      startX = e.clientX;
-      startY = e.clientY;
+      
+      const coords = getEventCoords(e);
+      startX = coords.x;
+      startY = coords.y;
       
       const rect = compass.getBoundingClientRect();
       initialLeft = rect.left;
@@ -704,13 +715,15 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
       
       e.preventDefault();
       e.stopPropagation();
-    }});
+    }}
     
-    document.addEventListener('mousemove', function(e) {{
+    // Move drag (mouse or touch)
+    function handleMove(e) {{
       if (!isDragging) return;
       
-      const deltaX = e.clientX - startX;
-      const deltaY = e.clientY - startY;
+      const coords = getEventCoords(e);
+      const deltaX = coords.x - startX;
+      const deltaY = coords.y - startY;
       
       // Consider it a drag if moved more than 5 pixels
       if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {{
@@ -727,9 +740,10 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         e.preventDefault();
         e.stopPropagation();
       }}
-    }});
+    }}
     
-    document.addEventListener('mouseup', function(e) {{
+    // End drag (mouse or touch)
+    function handleEnd(e) {{
       if (isDragging) {{
         isDragging = false;
         compass.style.cursor = 'move';
@@ -751,7 +765,17 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
           e.stopPropagation();
         }}
       }}
-    }});
+    }}
+    
+    // Mouse events
+    compass.addEventListener('mousedown', handleStart);
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleEnd);
+    
+    // Touch events
+    compass.addEventListener('touchstart', handleStart, {{ passive: false }});
+    document.addEventListener('touchmove', handleMove, {{ passive: false }});
+    document.addEventListener('touchend', handleEnd);
   }})();
 
   // --- Helper: find the Leaflet Map instance on the page ---
