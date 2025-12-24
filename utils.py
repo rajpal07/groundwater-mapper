@@ -365,7 +365,11 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
 
     fig, ax = plt.subplots(figsize=(12, 8), facecolor='none')
     ax.patch.set_alpha(0)
-    ax.contourf(grid_x, grid_y, grid_z, levels=contour_levels, cmap='viridis', alpha=0.6)
+    
+    # Draw contour lines instead of filled contours
+    contours = ax.contour(grid_x, grid_y, grid_z, levels=contour_levels, colors='black', linewidths=1.5, alpha=0.8)
+    ax.clabel(contours, inline=True, fontsize=8, fmt='%1.1f')  # Add labels to contour lines
+    
     ax.scatter(df['Easting'], df['Northing'], color='black', edgecolor='black', linewidth=0.8, s=40)
     
     step = 18  # Show ~30% of arrows
