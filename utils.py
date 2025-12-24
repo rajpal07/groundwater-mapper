@@ -1012,7 +1012,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
           .then(() => {{
               console.log("Warm-up complete. Waiting...");
               
-              // 2. Wait for cache/rasterization
+              // 2. Wait for cache/rasterization (longer delay for mobile)
               setTimeout(() => {{
                   
                   // 3. Real Snapshot
@@ -1031,7 +1031,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
                       restoreUI();
                   }});
                   
-              }}, 1000); // Wait 1s between snapshots
+              }}, 2000); // Increased from 1s to 2s for mobile
           }})
           .catch(function (error) {{
               // Even if warm-up fails, try the real one? 
@@ -1053,9 +1053,9 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
                        alert('Snapshot failed.');
                        restoreUI();
                    }});
-              }}, 1000);
+              }}, 2000); // Increased from 1s to 2s
           }});
-      }}, 500); // Initial delay
+      }}, 1000); // Increased from 500ms to 1s initial delay
   }};
 
   // --- Interactive Dots Logic ---
