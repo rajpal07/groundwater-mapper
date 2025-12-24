@@ -555,7 +555,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.js"></script>
 
 <!-- Compass UI - Realistic and Draggable -->
-<div id="compass" style="position:absolute; top:80px; left:10px; z-index:9999; width:80px; height:80px; cursor:move;" title="Drag to reposition | Click to reset rotation">
+<div id="compass" style="position:absolute; top:80px; left:10px; z-index:9999; width:80px; height:80px; cursor:move; touch-action: none; -webkit-user-select: none; user-select: none;" title="Drag to reposition | Click to reset rotation">
     <div id="compassInner" style="position:relative; width:100%; height:100%; background:radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(240,240,240,0.95) 100%); border-radius:50%; border:4px solid #2c3e50; box-shadow:0 4px 12px rgba(0,0,0,0.4), inset 0 2px 4px rgba(255,255,255,0.5); transition: transform 0.3s ease;">
         <!-- Outer ring with degree marks -->
         <div style="position:absolute; top:50%; left:50%; width:90%; height:90%; transform:translate(-50%, -50%);">
@@ -772,10 +772,11 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     document.addEventListener('mousemove', handleMove);
     document.addEventListener('mouseup', handleEnd);
     
-    // Touch events
+    // Touch events (with Safari-specific handling)
     compass.addEventListener('touchstart', handleStart, {{ passive: false }});
     document.addEventListener('touchmove', handleMove, {{ passive: false }});
     document.addEventListener('touchend', handleEnd);
+    document.addEventListener('touchcancel', handleEnd); // Handle touch cancel on Safari
   }})();
 
   // --- Helper: find the Leaflet Map instance on the page ---
