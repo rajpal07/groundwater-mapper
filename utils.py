@@ -1199,10 +1199,10 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         
         // Add dynamic scale control (like Google Maps)
         const scaleCtrl = L.control.scale({
-            position: 'bottomleft',
+            position: 'bottomleft', // Initial, we move it later
             metric: true,
             imperial: true,
-            maxWidth: 250  // Increased from 150 to 250 for better visibility
+            maxWidth: 250
         }).addTo(m);
         
         // Make scale control draggable
@@ -1210,7 +1210,21 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         scaleContainer.id = 'draggable-scale';
         scaleContainer.style.cursor = 'move';
         scaleContainer.title = "Drag to move";
-        scaleContainer.style.pointerEvents = 'auto';
+        scaleContainer.style.pointerEvents = 'auto'; // Ensure clickable
+        scaleContainer.style.zIndex = '9999'; // Ensure on top of everything
+        
+        // CRITICAL: Move it out of Leaflet's corner container to map root
+        // This allows free movement without being clipped or constrained
+        const mapRoot = m.getContainer();
+        mapRoot.appendChild(scaleContainer);
+        
+        // Reset/Set positioning
+        scaleContainer.style.position = 'absolute';
+        scaleContainer.style.bottom = '25px';
+        scaleContainer.style.left = '10px';
+        scaleContainer.style.marginBottom = '0';
+        scaleContainer.style.marginLeft = '0';
+        
         makeDraggable(scaleContainer);
     }}
 
