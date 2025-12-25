@@ -955,11 +955,30 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
   }};
   
   // --- Snapshot Logic ---
+  // --- Snapshot Logic ---
   window.takeSnapshot = function() {{
       const m = findMap();
       if (!m) return;
       
       const btn = document.getElementById('btn-snapshot');
+      
+      // Helper: Restore UI
+      const restoreUI = () => {{
+          const leafletControls = document.querySelector('.leaflet-control-container');
+          if (leafletControls) leafletControls.style.display = 'block';
+          
+          const controls = document.querySelectorAll('div[style*="z-index:9999"]');
+          controls.forEach(ctrl => {{
+              ctrl.style.display = 'block';
+          }});
+          
+          if (btn) {{
+            btn.disabled = false;
+            btn.innerText = '📸 Snapshot';
+            btn.style.opacity = '1';
+          }}
+      }};
+
       // Safety Timeout: Force UI restore if snapshot hangs for more than 15 seconds
       const safetyTimeout = setTimeout(() => {{
           console.warn('Snapshot process timed out (Safety Trigger)');
@@ -967,11 +986,10 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
           restoreUI();
       }}, 15000);
       
-      const snapshotBtn = document.getElementById('btn-snapshot'); // Renamed to avoid conflict
-      if (snapshotBtn) {{
-        snapshotBtn.disabled = true;
-        snapshotBtn.innerText = 'Capturing...';
-        snapshotBtn.style.opacity = '0.7';
+      if (btn) {{
+        btn.disabled = true;
+        btn.innerText = 'Capturing...';
+        btn.style.opacity = '0.7';
       }}
 
       // Hide standard Leaflet controls (Zoom, Layers, etc.)
@@ -987,186 +1005,67 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
       }});
       
       const mapContainer = m.getContainer();
-      
-      // Helper: Wait for overlay image to be fully loaded
-      const waitForOverlayImage = () => {{
-          return new Promise((resolve) => {{
-              const ov = findOverlay();
-              if (!ov) {{
-                  console.warn('No overlay found, proceeding anyway');
-                  resolve();
-                  return;
-              }}
-              
-              const img = (typeof ov.getElement === 'function') ? ov.getElement() : ov._image;
-              if (!img) {{
-                  console.warn('No overlay image found, proceeding anyway');
-                  resolve();
-                  return;
-              }}
-              
-              // Force browser to decode the image data (crucial for mobile snapshots)
-              if (img.decode) {{
-                  console.log('Attempting to force-decode overlay image...');
-                  
-                  // Race between decode and timeout
-                  const decodePromise = img.decode();
-                  const timeoutPromise = new Promise(r => setTimeout(r, 2000)); // 2s timeout for decode
-                  
-                  Promise.race([decodePromise, timeoutPromise])
-                      .then(() => {{
-                          console.log('Overlay image decode finished (or timed out)');
-                          resolve();
-                      }})
-                      .catch((err) => {{
-                          console.warn('Overlay image decode failed:', err);
-                          resolve(); // Proceed anyway
-                      }});
-                  return;
-              }}
-              
-              if (img.complete && img.naturalHeight !== 0) {{
-                  console.log('Overlay image already loaded (no decode support)');
-                  resolve();
-              }} else {{
-                  console.log('Waiting for overlay image to load...');
-                  img.onload = () => {{
-                      console.log('Overlay image loaded');
-                      resolve();
-                  }};
-                  img.onerror = () => {{
-                      console.warn('Overlay image failed to load, proceeding anyway');
-                      resolve();
-                  }};
-                  // Timeout after 3 seconds
-                  setTimeout(() => {{
-                      console.warn('Overlay image load timeout, proceeding anyway');
-                      resolve();
-                  }}, 3000);
-              }}
-          }});
-      }};
-      
-       const clearSafetyTimeout = () => {{
-           clearTimeout(safetyTimeout);
-       }};
 
-       // Options for html-to-image
-       const options = {{
+      // Detect mobile device
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      
+      // Options for html-to-image
+      const options = {{
            width: mapContainer.offsetWidth,
            height: mapContainer.offsetHeight,
            useCORS: true,
            backgroundColor: '#ffffff',
-           cacheBust: false, // DISABLED: Breaks Data URIs/Overlay reuse
-           pixelRatio: isMobile ? 2 : 3, // 2x Mobile (Safe), 3x Desktop (High Res)
+           cacheBust: false, // DISABLED: Breaks Data URIs
+           pixelRatio: isMobile ? 3 : 4, // High Resolution for all
            filter: (node) => {{
                if (node.tagName === 'IMG') return true; 
                return true;
            }}
        }};
 
-      // Helper: Restore UI
-      const restoreUI = () => {{
-          if (leafletControls) leafletControls.style.display = 'block';
-          controls.forEach(ctrl => {{
-              ctrl.style.display = 'block';
-          }});
-          if (btn) {{
-            btn.disabled = false;
-            btn.innerText = '📸 Snapshot';
-            btn.style.opacity = '1';
-          }}
-          clearSafetyTimeout();
-      }};
-      
-      // Detect mobile device
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      const initialDelay = isMobile ? 3000 : 1000;  // 3s for mobile, 1s for desktop
-      const betweenDelay = isMobile ? 4000 : 2000;  // 4s for mobile, 2s for desktop
-      
-      console.log('Device type:', isMobile ? 'Mobile' : 'Desktop');
-      console.log('Using delays:', initialDelay, 'ms initial,', betweenDelay, 'ms between');
-      
-      // First, ensure overlay image is loaded
-      waitForOverlayImage().then(() => {{
-          console.log('Overlay ready, starting snapshot process...');
-          
-          // Force map invalidation
-          if (m && typeof m.invalidateSize === 'function') {{
-              m.invalidateSize();
-          }}
-          
-          // EXPERIMENTAL: Inject hidden clone of overlay to force browser to keep it hot
-          const ov = findOverlay();
-          let hiddenImg = null;
-          if (ov) {{
-             let src = (typeof ov.getElement === 'function' ? ov.getElement().src : ov._image.src);
-             if (src) {{
-                 hiddenImg = document.createElement('img');
-                 hiddenImg.src = src;
-                 hiddenImg.style.position = 'absolute';
-                 hiddenImg.style.top = '-9999px';
-                 hiddenImg.style.left = '-9999px';
-                 hiddenImg.style.opacity = '0.01';
-                 document.body.appendChild(hiddenImg);
-             }}
-          }}
+      // SIMPLIFIED LOGIC:
+      // 1. Force Map Invalidation (Layout Refresh)
+      if (m && typeof m.invalidateSize === 'function') {{
+          m.invalidateSize();
+      }}
 
-          // Helper to wrap up success
-          const finishSnapshot = () => {{
-              clearSafetyTimeout();
+      // 2. Inject Hidden Clone (Heat up the image)
+      const ov = findOverlay();
+      if (ov) {{
+         let src = (typeof ov.getElement === 'function' ? ov.getElement().src : ov._image.src);
+         if (src) {{
+             let hiddenImg = document.createElement('img');
+             hiddenImg.src = src;
+             hiddenImg.style.position = 'absolute';
+             hiddenImg.style.top = '-9999px';
+             hiddenImg.style.opacity = '0.01';
+             document.body.appendChild(hiddenImg);
+             // Cleanup after a while
+             setTimeout(() => {{ if(hiddenImg) hiddenImg.remove(); }}, 10000); 
+         }}
+      }}
+
+      console.log('Starting simplified snapshot delay (3000ms)...');
+
+      // 3. One Fixed Delay then Snapshot
+      setTimeout(() => {{
+          htmlToImage.toPng(mapContainer, options)
+          .then(function (dataUrl) {{
+              const link = document.createElement('a');
+              link.download = 'map_snapshot.png';
+              link.href = dataUrl;
+              link.click();
+              
+              clearTimeout(safetyTimeout);
               restoreUI();
-          }};
-
-          setTimeout(() => {{
-              // 1. Warm-up (Discard result)
-              console.log("Starting Warm-up Snapshot...");
-              htmlToImage.toPng(mapContainer, options)
-              .then(() => {{
-                  console.log("Warm-up complete. Waiting...");
-                  
-                  // 2. Wait for cache/rasterization (longer delay for mobile)
-                  setTimeout(() => {{
-                      
-                      // 3. Real Snapshot
-                      console.log("Taking Real Snapshot...");
-                      htmlToImage.toPng(mapContainer, options)
-                      .then(function (dataUrl) {{
-                          const link = document.createElement('a');
-                          link.download = 'map_snapshot.png';
-                          link.href = dataUrl;
-                          link.click();
-                          finishSnapshot();
-                      }})
-                      .catch(function (error) {{
-                          console.error('Real Snapshot failed:', error);
-                          alert('Snapshot failed. See console.');
-                          finishSnapshot();
-                      }});
-                      
-                  }}, betweenDelay);
-              }})
-              .catch(function (error) {{
-                  console.warn('Warm-up Snapshot failed:', error);
-                  
-                  setTimeout(() => {{
-                       htmlToImage.toPng(mapContainer, options)
-                       .then(function (dataUrl) {{
-                          const link = document.createElement('a');
-                          link.download = 'map_snapshot.png';
-                          link.href = dataUrl;
-                          link.click();
-                          finishSnapshot();
-                       }})
-                       .catch(err => {{
-                           console.error('Fallback Snapshot failed:', err);
-                           alert('Snapshot failed.');
-                           finishSnapshot();
-                       }});
-                  }}, betweenDelay);
-              }});
-          }}, initialDelay);
-      }});
+          }})
+          .catch(function (error) {{
+              console.error('Snapshot failed:', error);
+              alert('Snapshot failed.');
+              clearTimeout(safetyTimeout);
+              restoreUI();
+          }});
+      }}, 3000);
   }};
 
   // --- Interactive Dots Logic ---
