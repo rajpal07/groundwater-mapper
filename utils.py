@@ -1025,7 +1025,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
           useCORS: true,
           backgroundColor: '#ffffff',
           cacheBust: true,
-          pixelRatio: 1, 
+          pixelRatio: 3, // Increased from 1 to 3 for higher resolution (3x) 
           filter: (node) => true
       }};
 
@@ -1202,7 +1202,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
             position: 'bottomleft',
             metric: true,
             imperial: true,
-            maxWidth: 150
+            maxWidth: 250  // Increased from 150 to 250 for better visibility
         }}).addTo(m);
     }}
 
