@@ -1182,6 +1182,14 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         const container = m.getContainer();
         if (compass && container) container.appendChild(compass);
         if (legend && container) container.appendChild(legend);
+        
+        // Add dynamic scale control (like Google Maps)
+        L.control.scale({{
+            position: 'bottomleft',
+            metric: true,
+            imperial: true,
+            maxWidth: 150
+        }}).addTo(m);
     }}
 
     // Initialize Overlay Observers
