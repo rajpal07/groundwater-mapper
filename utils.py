@@ -1198,12 +1198,12 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         if (legend && container) container.appendChild(legend);
         
         // Add dynamic scale control (like Google Maps)
-        const scaleCtrl = L.control.scale({
+        const scaleCtrl = L.control.scale({{
             position: 'bottomleft', // Initial, we move it later
             metric: true,
             imperial: true,
             maxWidth: 250
-        }).addTo(m);
+        }}).addTo(m);
         
         // Make scale control draggable
         const scaleContainer = scaleCtrl.getContainer();
