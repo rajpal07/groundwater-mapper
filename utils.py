@@ -1042,8 +1042,8 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
           height: mapContainer.offsetHeight,
           useCORS: true,
           backgroundColor: '#ffffff',
-          cacheBust: true,
-          pixelRatio: isMobile ? 2 : 3, // 2x for Mobile (Safe), 3x for Desktop (High Res)
+          cacheBust: false, // DISABLED: Breaks Data URIs/Overlay reuse
+          pixelRatio: isMobile ? 3 : 4, // 3x Mobile, 4x Desktop (High)
           filter: (node) => {{
               if (node.tagName === 'IMG') return true; 
               return true;
@@ -1081,12 +1081,27 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
       waitForOverlayImage().then(() => {{
           console.log('Overlay ready, starting snapshot process...');
           
-          // Force map to invalidate size and redraw (helps with rendering)
+          // Force map invalidation
           if (m && typeof m.invalidateSize === 'function') {{
               m.invalidateSize();
-              console.log('Map invalidated for fresh render');
           }}
           
+          // EXPERIMENTAL: Inject hidden clone of overlay to force browser to keep it hot
+          const ov = findOverlay();
+          let hiddenImg = null;
+          if (ov) {{
+             let src = (typeof ov.getElement === 'function' ? ov.getElement().src : ov._image.src);
+             if (src) {{
+                 hiddenImg = document.createElement('img');
+                 hiddenImg.src = src;
+                 hiddenImg.style.position = 'absolute';
+                 hiddenImg.style.top = '-9999px';
+                 hiddenImg.style.left = '-9999px';
+                 hiddenImg.style.opacity = '0.01';
+                 document.body.appendChild(hiddenImg);
+             }}
+          }}
+
           setTimeout(() => {{
               // 1. Warm-up (Discard result)
               console.log("Starting Warm-up Snapshot...");
