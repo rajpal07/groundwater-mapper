@@ -680,14 +680,14 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     }}
   }}
 
-  // --- Compass Drag and Click Functionality (Mouse + Touch Support) ---
-  (function initCompassDrag() {{
-    const compass = document.getElementById('compass');
+  // --- Generic Draggable Logic ---
+  function makeDraggable(element, options = {{}}) {{
+    if (!element) return;
+    
     let isDragging = false;
     let hasMoved = false;
     let startX, startY, initialLeft, initialTop;
     
-    // Helper to get coordinates from mouse or touch event
     function getEventCoords(e) {{
       if (e.touches && e.touches.length > 0) {{
         return {{ x: e.touches[0].clientX, y: e.touches[0].clientY }};
@@ -695,7 +695,6 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
       return {{ x: e.clientX, y: e.clientY }};
     }}
     
-    // Start drag (mouse or touch)
     function handleStart(e) {{
       isDragging = true;
       hasMoved = false;
@@ -704,23 +703,24 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
       startX = coords.x;
       startY = coords.y;
       
-      const rect = compass.getBoundingClientRect();
-      initialLeft = rect.left;
-      initialTop = rect.top;
+      const rect = element.getBoundingClientRect();
       
-      compass.style.cursor = 'grabbing';
+      // Calculate offset relative to parent for correct absolute positioning
+      const parent = element.offsetParent || document.body;
+      const parentRect = parent.getBoundingClientRect();
       
-      // Disable map dragging while dragging compass
+      initialLeft = rect.left - parentRect.left;
+      initialTop = rect.top - parentRect.top;
+      
+      element.style.cursor = 'grabbing';
+      
       const m = findMap();
-      if (m) {{
-        m.dragging.disable();
-      }}
+      if (m) m.dragging.disable();
       
       e.preventDefault();
       e.stopPropagation();
     }}
     
-    // Move drag (mouse or touch)
     function handleMove(e) {{
       if (!isDragging) return;
       
@@ -728,39 +728,33 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
       const deltaX = coords.x - startX;
       const deltaY = coords.y - startY;
       
-      // Consider it a drag if moved more than 5 pixels
-      if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {{
-        hasMoved = true;
-      }}
+      if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) hasMoved = true;
       
       if (hasMoved) {{
         const newLeft = initialLeft + deltaX;
         const newTop = initialTop + deltaY;
         
-        compass.style.left = newLeft + 'px';
-        compass.style.top = newTop + 'px';
+        element.style.position = 'absolute';
+        element.style.left = newLeft + 'px';
+        element.style.top = newTop + 'px';
+        element.style.bottom = 'auto';
+        element.style.right = 'auto';
         
         e.preventDefault();
         e.stopPropagation();
       }}
     }}
     
-    // End drag (mouse or touch)
     function handleEnd(e) {{
       if (isDragging) {{
         isDragging = false;
-        compass.style.cursor = 'move';
+        element.style.cursor = 'move';
         
-        // Re-enable map dragging
         const m = findMap();
-        if (m) {{
-          m.dragging.enable();
-        }}
+        if (m) m.dragging.enable();
         
-        // If it was a click (not a drag), reset rotation
-        if (!hasMoved) {{
-          currentRotation = 0;
-          resetImageBounds();
+        if (!hasMoved && options.onClick) {{
+          options.onClick(e);
         }}
         
         if (hasMoved) {{
@@ -770,17 +764,23 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
       }}
     }}
     
-    // Mouse events
-    compass.addEventListener('mousedown', handleStart);
+    element.addEventListener('mousedown', handleStart);
     document.addEventListener('mousemove', handleMove);
     document.addEventListener('mouseup', handleEnd);
     
-    // Touch events (with Safari-specific handling)
-    compass.addEventListener('touchstart', handleStart, {{ passive: false }});
+    element.addEventListener('touchstart', handleStart, {{ passive: false }});
     document.addEventListener('touchmove', handleMove, {{ passive: false }});
     document.addEventListener('touchend', handleEnd);
-    document.addEventListener('touchcancel', handleEnd); // Handle touch cancel on Safari
-  }})();
+    document.addEventListener('touchcancel', handleEnd);
+  }}
+
+  // Initialize Compass Dragging
+  makeDraggable(document.getElementById('compass'), {{
+      onClick: function() {{
+          currentRotation = 0;
+          resetImageBounds();
+      }}
+  }});
 
   // --- Helper: find the Leaflet Map instance on the page ---
   function findMap() {{
@@ -1198,12 +1198,20 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         if (legend && container) container.appendChild(legend);
         
         // Add dynamic scale control (like Google Maps)
-        L.control.scale({{
+        const scaleCtrl = L.control.scale({
             position: 'bottomleft',
             metric: true,
             imperial: true,
             maxWidth: 250  // Increased from 150 to 250 for better visibility
-        }}).addTo(m);
+        }).addTo(m);
+        
+        // Make scale control draggable
+        const scaleContainer = scaleCtrl.getContainer();
+        scaleContainer.id = 'draggable-scale';
+        scaleContainer.style.cursor = 'move';
+        scaleContainer.title = "Drag to move";
+        scaleContainer.style.pointerEvents = 'auto';
+        makeDraggable(scaleContainer);
     }}
 
     // Initialize Overlay Observers
