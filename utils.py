@@ -997,8 +997,25 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
                   return;
               }}
               
+              // Force browser to decode the image data (crucial for mobile snapshots)
+              if (img.decode) {{
+                  console.log('Attempting to force-decode overlay image...');
+                  img.decode()
+                      .then(() => {{
+                          console.log('Overlay image decoded successfully');
+                          resolve();
+                      }})
+                      .catch((err) => {{
+                          console.warn('Overlay image decode failed:', err);
+                          // Fallback to basic load check
+                          if (img.complete && img.naturalHeight !== 0) resolve();
+                          else resolve(); // Proceed anyway
+                      }});
+                  return;
+              }}
+              
               if (img.complete && img.naturalHeight !== 0) {{
-                  console.log('Overlay image already loaded');
+                  console.log('Overlay image already loaded (no decode support)');
                   resolve();
               }} else {{
                   console.log('Waiting for overlay image to load...');
