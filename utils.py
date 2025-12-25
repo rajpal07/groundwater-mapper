@@ -961,14 +961,16 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
       if (!m) return;
       
       const btn = document.getElementById('btn-snapshot');
+      const leafletControls = document.querySelector('.leaflet-control-container');
+      // Select controls robustly - filter by class or just all high z-index divs that ARE NOT legend/compass
+      // But re-querying relies on style string which changes. Better to query once.
+      const customControls = Array.from(document.querySelectorAll('div[style*="z-index:9999"]'));
       
       // Helper: Restore UI
       const restoreUI = () => {{
-          const leafletControls = document.querySelector('.leaflet-control-container');
           if (leafletControls) leafletControls.style.display = 'block';
           
-          const controls = document.querySelectorAll('div[style*="z-index:9999"]');
-          controls.forEach(ctrl => {{
+          customControls.forEach(ctrl => {{
               ctrl.style.display = 'block';
           }});
           
@@ -992,13 +994,11 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         btn.style.opacity = '0.7';
       }}
 
-      // Hide standard Leaflet controls (Zoom, Layers, etc.)
-      const leafletControls = document.querySelector('.leaflet-control-container');
+      // Hide standard Leaflet controls
       if (leafletControls) leafletControls.style.display = 'none';
 
       // Hide custom controls (excluding compass and legend)
-      const controls = document.querySelectorAll('div[style*="z-index:9999"]');
-      controls.forEach(ctrl => {{
+      customControls.forEach(ctrl => {{
           if (ctrl.id !== 'compass' && ctrl.id !== 'map-legend') {{
               ctrl.style.display = 'none';
           }}
