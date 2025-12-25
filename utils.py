@@ -1026,8 +1026,11 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
           useCORS: true,
           backgroundColor: '#ffffff',
           cacheBust: true,
-          pixelRatio: 4, // Increased to 4x for Ultra High Resolution 
-          filter: (node) => true
+          pixelRatio: isMobile ? 2 : 3, // 2x for Mobile (Safe), 3x for Desktop (High Res)
+          filter: (node) => {
+              if (node.tagName === 'IMG') return true; 
+              return true;
+          }
       }};
 
       // Helper: Restore UI
