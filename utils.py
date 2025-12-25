@@ -564,27 +564,27 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
 
 <!-- Compass UI - Realistic and Draggable -->
 <div id="compass" style="position:absolute; top:80px; left:10px; z-index:9999; width:80px; height:80px; cursor:move; touch-action: none; -webkit-user-select: none; user-select: none;" title="Drag to reposition | Click to reset rotation">
-    <div id="compassInner" style="position:relative; width:100%; height:100%; background:radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(240,240,240,0.95) 100%); border-radius:50%; border:4px solid #2c3e50; box-shadow:0 4px 12px rgba(0,0,0,0.4), inset 0 2px 4px rgba(255,255,255,0.5); transition: transform 0.3s ease;">
+    <div id="compassInner" style="position:relative; width:100%; height:100%; background:radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(240,240,240,0.95) 100%); border-radius:50%; border:4px solid #2c3e50; transition: transform 0.3s ease;">
         <!-- Outer ring with degree marks -->
         <div style="position:absolute; top:50%; left:50%; width:90%; height:90%; transform:translate(-50%, -50%);">
             <!-- Cardinal direction markers -->
-            <div style="position:absolute; top:2px; left:50%; transform:translateX(-50%); color:#c0392b; font-weight:bold; font-size:18px; text-shadow:1px 1px 2px rgba(0,0,0,0.3);">N</div>
-            <div style="position:absolute; bottom:2px; left:50%; transform:translateX(-50%); color:#34495e; font-weight:bold; font-size:14px; text-shadow:1px 1px 2px rgba(0,0,0,0.2);">S</div>
-            <div style="position:absolute; top:50%; right:2px; transform:translateY(-50%); color:#34495e; font-weight:bold; font-size:14px; text-shadow:1px 1px 2px rgba(0,0,0,0.2);">E</div>
-            <div style="position:absolute; top:50%; left:2px; transform:translateY(-50%); color:#34495e; font-weight:bold; font-size:14px; text-shadow:1px 1px 2px rgba(0,0,0,0.2);">W</div>
+            <div style="position:absolute; top:2px; left:50%; transform:translateX(-50%); color:#c0392b; font-weight:bold; font-size:18px;">N</div>
+            <div style="position:absolute; bottom:2px; left:50%; transform:translateX(-50%); color:#34495e; font-weight:bold; font-size:14px;">S</div>
+            <div style="position:absolute; top:50%; right:2px; transform:translateY(-50%); color:#34495e; font-weight:bold; font-size:14px;">E</div>
+            <div style="position:absolute; top:50%; left:2px; transform:translateY(-50%); color:#34495e; font-weight:bold; font-size:14px;">W</div>
         </div>
         
         <!-- Center circle -->
-        <div style="position:absolute; top:50%; left:50%; width:12px; height:12px; transform:translate(-50%, -50%); background:#2c3e50; border-radius:50%; border:2px solid #ecf0f1; box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+        <div style="position:absolute; top:50%; left:50%; width:12px; height:12px; transform:translate(-50%, -50%); background:#2c3e50; border-radius:50%; border:2px solid #ecf0f1;"></div>
         
         <!-- North arrow (red) -->
         <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%);">
-            <div style="position:absolute; bottom:6px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:8px solid transparent; border-right:8px solid transparent; border-bottom:35px solid #c0392b; filter:drop-shadow(0 2px 3px rgba(0,0,0,0.3));"></div>
+            <div style="position:absolute; bottom:6px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:8px solid transparent; border-right:8px solid transparent; border-bottom:35px solid #c0392b;"></div>
         </div>
         
         <!-- South arrow (white) -->
         <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%);">
-            <div style="position:absolute; top:6px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:8px solid transparent; border-right:8px solid transparent; border-top:35px solid #ecf0f1; filter:drop-shadow(0 2px 3px rgba(0,0,0,0.2));"></div>
+            <div style="position:absolute; top:6px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:8px solid transparent; border-right:8px solid transparent; border-top:35px solid #ecf0f1;"></div>
         </div>
         
         <!-- Decorative tick marks -->
@@ -636,7 +636,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
   
   <!-- Points -->
   <div style="display:flex; align-items:center; margin-bottom:10px;">
-    <div style="width:12px; height:12px; background:#FF6B35; border-radius:50%; border:2px solid white; margin-right:8px; box-shadow:0 0 2px rgba(0,0,0,0.5);"></div>
+    <div style="width:12px; height:12px; background:#FF6B35; border-radius:50%; border:2px solid white; margin-right:8px;"></div>
     <span>Borewell Points</span>
   </div>
 
