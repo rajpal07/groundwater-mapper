@@ -955,24 +955,24 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
   }};
   
   // --- Snapshot Logic ---
-  window.takeSnapshot = function() {
+  window.takeSnapshot = function() {{
       const m = findMap();
       if (!m) return;
       
       const btn = document.getElementById('btn-snapshot');
       // Safety Timeout: Force UI restore if snapshot hangs for more than 15 seconds
-      const safetyTimeout = setTimeout(() => {
+      const safetyTimeout = setTimeout(() => {{
           console.warn('Snapshot process timed out (Safety Trigger)');
           alert('Snapshot timed out. Please try again.');
           restoreUI();
-      }, 15000);
+      }}, 15000);
       
       const snapshotBtn = document.getElementById('btn-snapshot'); // Renamed to avoid conflict
-      if (snapshotBtn) {
+      if (snapshotBtn) {{
         snapshotBtn.disabled = true;
         snapshotBtn.innerText = 'Capturing...';
         snapshotBtn.style.opacity = '0.7';
-      }
+      }}
 
       // Hide standard Leaflet controls (Zoom, Layers, etc.)
       const leafletControls = document.querySelector('.leaflet-control-container');
@@ -980,34 +980,33 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
 
       // Hide custom controls (excluding compass and legend)
       const controls = document.querySelectorAll('div[style*="z-index:9999"]');
-      controls.forEach(ctrl => {
-          if (ctrl.id !== 'compass' && ctrl.id !== 'map-legend') {
+      controls.forEach(ctrl => {{
+          if (ctrl.id !== 'compass' && ctrl.id !== 'map-legend') {{
               ctrl.style.display = 'none';
-          }
-      });
+          }}
+      }});
       
       const mapContainer = m.getContainer();
       
       // Helper: Wait for overlay image to be fully loaded
-      const waitForOverlayImage = () => {
-          return new Promise((resolve) => {
+      const waitForOverlayImage = () => {{
+          return new Promise((resolve) => {{
               const ov = findOverlay();
-              if (!ov) {
+              if (!ov) {{
                   console.warn('No overlay found, proceeding anyway');
                   resolve();
                   return;
-              }
+              }}
               
               const img = (typeof ov.getElement === 'function') ? ov.getElement() : ov._image;
-              if (!img) {
+              if (!img) {{
                   console.warn('No overlay image found, proceeding anyway');
                   resolve();
                   return;
-              }
+              }}
               
               // Force browser to decode the image data (crucial for mobile snapshots)
-              // Force browser to decode the image data (crucial for mobile snapshots)
-              if (img.decode) {
+              if (img.decode) {{
                   console.log('Attempting to force-decode overlay image...');
                   
                   // Race between decode and timeout
@@ -1015,75 +1014,70 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
                   const timeoutPromise = new Promise(r => setTimeout(r, 2000)); // 2s timeout for decode
                   
                   Promise.race([decodePromise, timeoutPromise])
-                      .then(() => {
+                      .then(() => {{
                           console.log('Overlay image decode finished (or timed out)');
                           resolve();
-                      })
-                      .catch((err) => {
+                      }})
+                      .catch((err) => {{
                           console.warn('Overlay image decode failed:', err);
                           resolve(); // Proceed anyway
-                      });
+                      }});
                   return;
-              }
+              }}
               
-              if (img.complete && img.naturalHeight !== 0) {
+              if (img.complete && img.naturalHeight !== 0) {{
                   console.log('Overlay image already loaded (no decode support)');
                   resolve();
-              } else {
+              }} else {{
                   console.log('Waiting for overlay image to load...');
-                  img.onload = () => {
+                  img.onload = () => {{
                       console.log('Overlay image loaded');
                       resolve();
-                  };
-                  img.onerror = () => {
+                  }};
+                  img.onerror = () => {{
                       console.warn('Overlay image failed to load, proceeding anyway');
                       resolve();
-                  };
+                  }};
                   // Timeout after 3 seconds
-                  setTimeout(() => {
+                  setTimeout(() => {{
                       console.warn('Overlay image load timeout, proceeding anyway');
                       resolve();
-                  }, 3000);
-              }
-          });
-      };
+                  }}, 3000);
+              }}
+          }});
+      }};
       
-       const clearSafetyTimeout = () => {
+       const clearSafetyTimeout = () => {{
            clearTimeout(safetyTimeout);
-       };
+       }};
 
        // Options for html-to-image
-       const options = {
+       const options = {{
            width: mapContainer.offsetWidth,
            height: mapContainer.offsetHeight,
            useCORS: true,
            backgroundColor: '#ffffff',
            cacheBust: false, // DISABLED: Breaks Data URIs/Overlay reuse
            pixelRatio: isMobile ? 2 : 3, // 2x Mobile (Safe), 3x Desktop (High Res)
-           filter: (node) => {
+           filter: (node) => {{
                if (node.tagName === 'IMG') return true; 
                return true;
-           }
-       };
+           }}
+       }};
 
       // Helper: Restore UI
-      const restoreUI = () => {
+      const restoreUI = () => {{
           if (leafletControls) leafletControls.style.display = 'block';
-          controls.forEach(ctrl => {
+          controls.forEach(ctrl => {{
               ctrl.style.display = 'block';
           }});
           if (btn) {{
             btn.disabled = false;
-            btn.innerHTML = '📸 Snapshot';
-            btn.style.opacity = '1.0';
+            btn.innerText = '📸 Snapshot';
+            btn.style.opacity = '1';
           }}
+          clearSafetyTimeout();
       }};
-
-      // STRATEGY: Wait for overlay + Double Snapshot
-      // 0. Wait for overlay image to load
-      // 1. First "Warm-up" Snapshot (Often blank/incomplete on mobile)
-      // 2. Wait
-      // 3. Second "Real" Snapshot
       
       // Detect mobile device
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
