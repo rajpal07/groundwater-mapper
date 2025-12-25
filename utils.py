@@ -364,7 +364,7 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
         interval
     )
 
-    fig, ax = plt.subplots(figsize=(12, 8), facecolor='none')
+    fig, ax = plt.subplots(figsize=(12, 8), facecolor='none', dpi=300)
     ax.patch.set_alpha(0)
     
     # Draw filled contours (colors) first
@@ -377,7 +377,7 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     ax.scatter(df['Easting'], df['Northing'], color='black', edgecolor='black', linewidth=0.8, s=40)
     
     step = 18  # Show ~30% of arrows
-    ax.quiver(grid_x[::step, ::step], grid_y[::step, ::step], u[::step, ::step], v[::step, ::step], color='red', scale=25, width=0.002)
+    ax.quiver(grid_x[::step, ::step], grid_y[::step, ::step], u[::step, ::step], v[::step, ::step], color='red', scale=25, width=0.005, headwidth=4)
 
     # Bounding box (visual only for the image)
     bbox_x = df['Easting'].min()
@@ -1026,7 +1026,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
           useCORS: true,
           backgroundColor: '#ffffff',
           cacheBust: true,
-          pixelRatio: 3, // Increased from 1 to 3 for higher resolution (3x) 
+          pixelRatio: 4, // Increased to 4x for Ultra High Resolution 
           filter: (node) => true
       }};
 
