@@ -1045,27 +1045,40 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
          }}
       }}
 
-      console.log('Starting simplified snapshot delay (3000ms)...');
+      console.log('Starting simplified double-flash snapshot...');
 
-      // 3. One Fixed Delay then Snapshot
+      // 3. FLASH 1: Warm-up Snapshot (Dummy run to prime the canvas)
       setTimeout(() => {{
+          console.log('Flash 1: Warm-up...');
           htmlToImage.toPng(mapContainer, options)
-          .then(function (dataUrl) {{
-              const link = document.createElement('a');
-              link.download = 'map_snapshot.png';
-              link.href = dataUrl;
-              link.click();
-              
-              clearTimeout(safetyTimeout);
-              restoreUI();
-          }})
-          .catch(function (error) {{
-              console.error('Snapshot failed:', error);
-              alert('Snapshot failed.');
-              clearTimeout(safetyTimeout);
-              restoreUI();
-          }});
-      }}, 3000);
+             .then(() => {{
+                 console.log('Flash 1 complete. Waiting for final render...');
+             }})
+             .catch(err => console.warn('Flash 1 failed (ignoring):', err));
+
+          // 4. FLASH 2: Real Snapshot (After 3000ms total)
+          setTimeout(() => {{
+              console.log('Flash 2: Taking final snapshot...');
+              htmlToImage.toPng(mapContainer, options)
+              .then(function (dataUrl) {{
+                  const link = document.createElement('a');
+                  link.download = 'map_snapshot.png';
+                  link.href = dataUrl;
+                  link.click();
+                  
+                  clearTimeout(safetyTimeout);
+                  restoreUI();
+              }})
+              .catch(function (error) {{
+                  console.error('Snapshot failed:', error);
+                  alert('Snapshot failed.');
+                  // Always restore UI
+                  clearTimeout(safetyTimeout);
+                  restoreUI();
+              }});
+          }}, 3000);
+          
+      }}, 500); // Start warm-up quickly (500ms)
   }};
 
   // --- Interactive Dots Logic ---
