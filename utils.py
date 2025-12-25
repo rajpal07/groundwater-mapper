@@ -13,6 +13,7 @@ import geopandas as gpd
 import ee
 import streamlit as st
 from google.oauth2.service_account import Credentials
+print("DEBUG: Loading utils.py - Version ScaleFix_v3")
 import geemap.foliumap as geemap
 import folium
 from folium.raster_layers import ImageOverlay
