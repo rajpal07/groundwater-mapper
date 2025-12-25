@@ -1048,9 +1048,23 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
       // 2. Wait
       // 3. Second "Real" Snapshot
       
+      // Detect mobile device
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const initialDelay = isMobile ? 3000 : 1000;  // 3s for mobile, 1s for desktop
+      const betweenDelay = isMobile ? 4000 : 2000;  // 4s for mobile, 2s for desktop
+      
+      console.log('Device type:', isMobile ? 'Mobile' : 'Desktop');
+      console.log('Using delays:', initialDelay, 'ms initial,', betweenDelay, 'ms between');
+      
       // First, ensure overlay image is loaded
       waitForOverlayImage().then(() => {{
           console.log('Overlay ready, starting snapshot process...');
+          
+          // Force map to invalidate size and redraw (helps with rendering)
+          if (m && typeof m.invalidateSize === 'function') {{
+              m.invalidateSize();
+              console.log('Map invalidated for fresh render');
+          }}
           
           setTimeout(() => {{
               // 1. Warm-up (Discard result)
@@ -1078,7 +1092,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
                           restoreUI();
                       }});
                       
-                  }}, 2000); // Increased from 1s to 2s for mobile
+                  }}, betweenDelay);
               }})
               .catch(function (error) {{
                   // Even if warm-up fails, try the real one? 
@@ -1100,9 +1114,9 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
                            alert('Snapshot failed.');
                            restoreUI();
                        }});
-                  }}, 2000); // Increased from 1s to 2s
+                  }}, betweenDelay);
               }});
-          }}, 1000); // Increased from 500ms to 1s initial delay
+          }}, initialDelay);
       }});
   }};
 
