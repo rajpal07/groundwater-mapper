@@ -10,24 +10,12 @@ from zipfile import ZipFile
 from pykml import parser
 from shapely.geometry import Point, box, mapping
 import geopandas as gpd
-import os
-import json
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
-from scipy.interpolate import griddata
-from pyproj import Transformer
-from zipfile import ZipFile
-from pykml import parser
-from shapely.geometry import Point, box, mapping
-import geopandas as gpd
 import ee
 import streamlit as st
 from google.oauth2.service_account import Credentials
-print("DEBUG: Loading utils.py - Version RestoreEE_v2")
-import geemap.foliumap as geemap
-import geemap.coreutils # Import coreutils explicitly for patching
+print("DEBUG: Loading utils.py - Version FixImports_v1")
+import geemap.foliumap as geemap_folium # Validated: Use Folium backend explicitly
+import geemap.coreutils 
 import folium
 from folium.raster_layers import ImageOverlay
 import io
@@ -508,12 +496,14 @@ def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_
         geemap.coreutils.ee_initialize = lambda *args, **kwargs: None
         
         # Patch the module we interact with directly
-        geemap.ee_initialize = lambda *args, **kwargs: None
+        geemap_folium.ee_initialize = lambda *args, **kwargs: None
         
     except Exception as e:
         print(f"EE not active, letting geemap try init (expect errors if secrets missing): {e}")
 
-    m = geemap.Map(center=[center_lat, center_lon], zoom=16, basemap='SATELLITE', max_zoom=19, zoom_control=False, attributionControl=False)
+    m = geemap_folium.Map(center=[center_lat, center_lon], zoom=16, basemap='SATELLITE', max_zoom=19, zoom_control=False, attributionControl=False)
+    print(f"DEBUG: Map Type: {type(m)}")
+    # print(f"DEBUG: Map Attributes: {dir(m)[:10]}...") # Inspect first few attributes
 
 
     # Add contour overlay
