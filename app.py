@@ -107,10 +107,14 @@ if st.session_state['processed_data'] is not None:
 
                 # 2. Process Data for Map
                 # Pass DataFrame directly to utils
+                # OPTIMIZATION: Only generate contours for Groundwater/Elevation
+                should_generate_contours = "Water Level" in selected_param or "Elevation" in selected_param
+                
                 image_base64, image_bounds, target_points, bbox_geojson = utils.process_excel_data(
                     df, 
                     reference_points=kmz_points,
-                    value_column=selected_param
+                    value_column=selected_param,
+                    generate_contours=should_generate_contours
                 )
                 
                 # 3. Create Map

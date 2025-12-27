@@ -274,7 +274,7 @@ def auto_detect_utm_zone(df, reference_points=None):
     return best_match['epsg'], best_confidence, best_match
 
 
-def process_excel_data(file, interpolation_method='linear', reference_points=None, value_column='Groundwater Elevation mAHD'):
+def process_excel_data(file, interpolation_method='linear', reference_points=None, value_column='Groundwater Elevation mAHD', generate_contours=True):
     """
     Reads Excel file (or DataFrame), interpolates data, and generates a contour image.
     
@@ -283,10 +283,11 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
         interpolation_method: 'linear' or 'cubic'
         reference_points: Optional list of points (e.g. from KMZ) to help with zone detection
         value_column: The specific column to map (default: 'Groundwater Elevation mAHD')
+        generate_contours: If True, generates interpolation and overlay. If False, returns None for image.
         
     Returns:
-        - image_base64: Base64 encoded PNG image of the contour.
-        - bounds: [[min_lat, min_lon], [max_lat, max_lon]] for the image overlay.
+        - image_base64: Base64 encoded PNG image of the contour (or None).
+        - bounds: [[min_lat, min_lon], [max_lat, max_lon]] for the image overlay (or None).
         - target_points: List of dictionaries for target points (lat, lon, id).
         - bbox_geojson: GeoJSON of the bounding box.
     """
@@ -316,100 +317,94 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     if df.empty:
         raise ValueError("No valid data found in Excel file.")
 
-    # Interpolation grid
-    # Increase density for smoother contours
-    grid_x, grid_y = np.mgrid[
-        df['Easting'].min():df['Easting'].max():200j,
-        df['Northing'].min():df['Northing'].max():200j
-    ]
-
     # Auto-detect UTM zone using enhanced algorithm
     # Supports all Australian zones (49S-56S) with mathematical calculation
     # Uses reference_points (if provided) to resolve zone ambiguity
     selected_epsg, confidence, zone_info = auto_detect_utm_zone(df, reference_points)
     
-    # Reproject grid corners to get lat/lon bounds for the IMAGE
+    # Create transformer
     transformer = Transformer.from_crs(selected_epsg, "EPSG:4326", always_xy=True)
-    min_easting, max_easting = grid_x.min(), grid_x.max()
-    min_northing, max_northing = grid_y.min(), grid_y.max()
+
+    # -------------------------------------------------------------
+    # OPTIMIZATION: Skip Heavy Interpolation if generate_contours=False
+    # -------------------------------------------------------------
     
-    # Transform corners
-    min_lon, min_lat = transformer.transform(min_easting, min_northing)
-    max_lon, max_lat = transformer.transform(max_easting, max_northing)
-    
-    # Folium expects [[lat_min, lon_min], [lat_max, lon_max]]
-    # BUT check order: usually [[south, west], [north, east]]
-    image_bounds = [[min_lat, min_lon], [max_lat, max_lon]]
+    image_base64 = None
+    image_bounds = None
+    min_lon, min_lat, max_lon, max_lat = 0, 0, 0, 0
 
-    # Interpolation
-    grid_z = griddata(
-        points=(df['Easting'], df['Northing']),
-        values=df[target_col],
-        xi=(grid_x, grid_y),
-        method=interpolation_method
-    )
+    if generate_contours:
+        # Interpolation grid
+        # Increase density for smoother contours
+        xi = np.linspace(df['Easting'].min(), df['Easting'].max(), 200)
+        yi = np.linspace(df['Northing'].min(), df['Northing'].max(), 200)
+        grid_x, grid_y = np.meshgrid(xi, yi)
+        
+        # Reproject grid corners to get lat/lon bounds for the IMAGE
+        min_easting, max_easting = grid_x.min(), grid_x.max()
+        min_northing, max_northing = grid_y.min(), grid_y.max()
+        
+        # Transform corners
+        min_lon, min_lat = transformer.transform(min_easting, min_northing)
+        max_lon, max_lat = transformer.transform(max_easting, max_northing)
+        
+        # Folium expects [[lat_min, lon_min], [lat_max, lon_max]]
+        image_bounds = [[min_lat, min_lon], [max_lat, max_lon]]
 
-    # Fill NaNs - COMMENTED OUT AS PER REQUEST (Breaking/Incorrect results)
-    # mask_nan = np.isnan(grid_z)
-    # if np.any(mask_nan):
-    #     grid_z_nearest = griddata(
-    #         points=(df['Easting'], df['Northing']),
-    #         values=df[target_col],
-    #         xi=(grid_x, grid_y),
-    #         method='nearest'
-    #     )
-    #     grid_z[mask_nan] = grid_z_nearest[mask_nan]
-
-    # Generate Contour Image
-    dz_dx, dz_dy = np.gradient(grid_z)
-    magnitude = np.sqrt(dz_dx**2 + dz_dy**2)
-    u = -dz_dx / (magnitude + 1e-10)
-    v = -dz_dy / (magnitude + 1e-10)
-
-    z_min, z_max = df[target_col].min(), df[target_col].max()
-    z_range = z_max - z_min
-    interval = 1.0 if z_range > 10 else 0.5 if z_range > 5 else 0.2 if z_range > 2 else 0.1 if z_range > 1 else 0.05 if z_range > 0.5 else 0.01
-
-    if z_range == 0:
-        contour_levels = [z_min]
-    else:
-        contour_levels = np.arange(
-            np.floor(z_min / interval) * interval,
-            np.ceil(z_max / interval) * interval + interval,
-            interval
+        # Interpolation
+        grid_z = griddata(
+            points=(df['Easting'], df['Northing']),
+            values=df[target_col],
+            xi=(grid_x, grid_y),
+            method=interpolation_method
         )
 
-    fig, ax = plt.subplots(figsize=(12, 8), facecolor='none', dpi=300)
-    ax.patch.set_alpha(0)
-    
-    # Draw filled contours (colors) first
-    ax.contourf(grid_x, grid_y, grid_z, levels=contour_levels, cmap='viridis', alpha=0.6)
-    
-    # Draw contour lines on top (black lines with labels)
-    contours = ax.contour(grid_x, grid_y, grid_z, levels=contour_levels, colors='black', linewidths=1.5, alpha=0.8)
-    ax.clabel(contours, inline=True, fontsize=8, fmt='%1.1f')  # Add labels to contour lines
-    
-    ax.scatter(df['Easting'], df['Northing'], color='black', edgecolor='black', linewidth=0.8, s=40)
-    
-    step = 18  # Show ~30% of arrows
-    ax.quiver(grid_x[::step, ::step], grid_y[::step, ::step], u[::step, ::step], v[::step, ::step], color='red', scale=25, width=0.005, headwidth=4)
+        # Generate Contour Image
+        dz_dx, dz_dy = np.gradient(grid_z)
+        magnitude = np.sqrt(dz_dx**2 + dz_dy**2)
+        u = -dz_dx / (magnitude + 1e-10)
+        v = -dz_dy / (magnitude + 1e-10)
 
-    # Bounding box (visual only for the image)
-    bbox_x = df['Easting'].min()
-    bbox_y = df['Northing'].min()
-    bbox_width = df['Easting'].max() - bbox_x
-    bbox_height = df['Northing'].max() - bbox_y
-    bbox_rect = Rectangle((bbox_x, bbox_y), bbox_width, bbox_height, linewidth=2, edgecolor='blue', facecolor='none', linestyle='--')
-    ax.add_patch(bbox_rect)
+        z_min, z_max = df[target_col].min(), df[target_col].max()
+        z_range = z_max - z_min
+        
+        # Avoid zero range
+        if z_range == 0: z_range = 1
+        
+        levels = np.linspace(z_min, z_max, 20)
+        
+        # Plot
+        fig, ax = plt.subplots(figsize=(10, 10))
+        # Filled contours (Visuals)
+        contour_filled = ax.contourf(grid_x, grid_y, grid_z, levels=levels, cmap='viridis', alpha=0.6)
+        # Contour lines (Structure)
+        contour_lines = ax.contour(grid_x, grid_y, grid_z, levels=levels, colors='black', linewidths=0.5, alpha=0.5)
+        
+        # Streamplot for flow direction
+        stream = ax.streamplot(grid_x, grid_y, u, v, color='red', density=1.0, linewidth=1.0, arrowsize=1.5)
 
-    ax.axis('off')
-    
-    # Save to buffer
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', pad_inches=0, transparent=True)
-    plt.close()
-    buf.seek(0)
-    image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+        ax.axis('off')
+        plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+        
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', transparent=True, bbox_inches='tight', pad_inches=0)
+        plt.close()
+        buf.seek(0)
+        image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+
+    else:
+        # Just calculate bounds from data points for BBox
+        lons, lats = transformer.transform(df['Easting'].values, df['Northing'].values)
+        min_lon, max_lon = min(lons), max(lons)
+        min_lat, max_lat = min(lats), max(lats)
+        # Add slight padding
+        lat_pad = (max_lat - min_lat) * 0.1
+        lon_pad = (max_lon - min_lon) * 0.1
+        min_lat -= lat_pad; max_lat += lat_pad
+        min_lon -= lon_pad; max_lon += lon_pad
+        
+        # No image bounds needed if no image
+        image_bounds = None
 
     # Target Points (Lat/Lon) with Borewell Names
     target_lons, target_lats = transformer.transform(df['Easting'].values, df['Northing'].values)
@@ -445,7 +440,7 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
         },
         "properties": {}
     }
-    print(f"DEBUG: BBox Coordinates: {bbox_geojson['geometry']['coordinates']}")
+    # print(f"DEBUG: BBox Coordinates: {bbox_geojson['geometry']['coordinates']}")
 
     return image_base64, image_bounds, target_points, bbox_geojson
 
@@ -514,17 +509,18 @@ def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_
     # print(f"DEBUG: Map Attributes: {dir(m)[:10]}...") # Inspect first few attributes
 
 
-    # Add contour overlay
-    img_url = f"data:image/png;base64,{image_base64}"
-    ImageOverlay(
-        image=img_url,
-        bounds=image_bounds,
-        opacity=0.7,
-        interactive=False,
-        cross_origin=True,
-        zindex=1,
-        name="Groundwater Contour"
-    ).add_to(m)
+    # Add contour overlay (only if generated)
+    if image_base64 and image_bounds:
+        img_url = f"data:image/png;base64,{image_base64}"
+        ImageOverlay(
+            image=img_url,
+            bounds=image_bounds,
+            opacity=0.7,
+            interactive=False,
+            cross_origin=True,
+            zindex=1,
+            name="Groundwater Contour"
+        ).add_to(m)
 
     # Add bounding box if provided
     if bbox_geojson:

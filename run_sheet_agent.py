@@ -65,10 +65,34 @@ def test_agent():
                 
             except Exception as e:
                 print(f"   -> Map Creation Warning: {e}")
-                print("      (This is expected if running locally without 'st.secrets' configured)")
-                # Mock file for HTML injection test
-                with open("test_map_gw.html", "w", encoding="utf-8") as f:
-                    f.write("<html><body><div class='folium-map'></div></body></html>")
+
+            # ------------------------------------------------------------------
+            # 3. VERIFICATION: Test Chemical Optimization (No Contours)
+            # ------------------------------------------------------------------
+            print("\n3. Testing Optimization (Chemicals should SKIP contours)...")
+            try:
+                # Pick a chemical column
+                chem_col = "Chloride" 
+                if chem_col not in df.columns: chem_col = df.columns[10] # Fallback
+                
+                print(f"   Testing '{chem_col}'...")
+                
+                # Manually call process_excel_data with contour flag = False (simulating app behavior)
+                # In app.py: should_generate_contours = "Water Level" in param ...
+                should_gen = "Water Level" in chem_col or "Elevation" in chem_col
+                print(f"   Should Generate Contours? {should_gen}")
+                
+                img, bounds, pts, box = utils.process_excel_data(df, value_column=chem_col, generate_contours=should_gen)
+                
+                if img is None and bounds is None:
+                    print("   -> SUCCESS: Contours skipped for chemical (Optimization working).")
+                else:
+                    print("   -> FAILURE: Contours generated despite optimization flag!")
+                    
+            except Exception as e:
+                print(f"   -> Optimization Test Error: {e}")
+
+    # 4. Final Summary
             
             # Test Injection
             utils.inject_controls_to_html("test_map_gw.html", bounds, points, legend_label="Groundwater Level")
