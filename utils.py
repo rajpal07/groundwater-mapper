@@ -413,12 +413,19 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
 
     # Target Points (Lat/Lon) with Borewell Names
     target_lons, target_lats = transformer.transform(df['Easting'].values, df['Northing'].values)
+    
+    # helper to safely get name
+    def get_point_name(row, idx):
+        if 'Well ID' in row: return str(row['Well ID'])
+        if 'Name' in row: return str(row['Name'])
+        return f"Point {idx}"
+        
     target_points = [
         {
             "lat": lat, 
             "lon": lon, 
             "id": i,
-            "name": df.iloc[i]['Name'] if 'Name' in df.columns else f"Point {i}"
+            "name": get_point_name(df.iloc[i], i)
         } 
         for i, (lat, lon) in enumerate(zip(target_lats, target_lons))
     ]
@@ -483,14 +490,15 @@ def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_
 
     # Create GEE map with satellite basemap - Controls disabled
     
-    # --- HOTFIX: Prevent geemap from confusing Auth ---
-    # Since we manually initialized EE with Service Account, we must stop geemap from trying to re-init
-    # which causes 'KeyError: client_secret' on Cloud.
+    # --- Production Environment Configuration ---
+    # We manually initialized Earth Engine with Service Account credentials above.
+    # We now override geemap's default initialization to prevent it from attempting 
+    # redundant OAuth flows (which cause 'client_secret' errors in cloud environments).
     try:
         # Check if EE is alive
         ee.Image(0).getInfo()
-        # If alive, disable geemap's init trigger
-        print("EE already active. Aggressively patching geemap to skip init.")
+        # If alive, configure geemap to use existing session
+        print("Earth Engine active. Configuring geemap to use existing session.")
         
         # Patch coreutils (imported at top level now)
         geemap.coreutils.ee_initialize = lambda *args, **kwargs: None
@@ -499,7 +507,7 @@ def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_
         geemap_folium.ee_initialize = lambda *args, **kwargs: None
         
     except Exception as e:
-        print(f"EE not active, letting geemap try init (expect errors if secrets missing): {e}")
+        print(f"Earth Engine not active, attempting default initialization: {e}")
 
     m = geemap_folium.Map(center=[center_lat, center_lon], zoom=16, basemap='SATELLITE', max_zoom=19, zoom_control=False, attributionControl=False)
     print(f"DEBUG: Map Type: {type(m)}")
