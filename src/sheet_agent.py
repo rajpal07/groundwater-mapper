@@ -3,6 +3,7 @@ import pandas as pd
 from llama_parse import LlamaParse
 from llama_index.core import SimpleDirectoryReader
 import io
+import re
 
 class SheetAgent:
     def __init__(self, api_key):
@@ -245,8 +246,13 @@ class SheetAgent:
         # 1. Coordinate Cleaning
         # The markdown might have 'Eassting' (typo) or 'Easting'
         # Let's normalize column names
-        # remove '\', '*' from column names to prevent JSON escape errors
-        df.columns = [c.replace('\\', '').replace('*', '').strip() for c in df.columns]
+        # STRICT CLEANING: remove anything that isn't alphanumeric, space, or parens
+        # This removes \* \ etc that cause JSON escape errors
+        def clean_col(col_name):
+            # Keep letters, numbers, spaces, (), -, _
+            return re.sub(r'[^\w\s\(\)\-\.]', '', col_name).strip()
+
+        df.columns = [clean_col(c) for c in df.columns]
         
         # Map common misspellings or variations
         col_map = {

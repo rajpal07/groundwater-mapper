@@ -63,6 +63,17 @@ with st.sidebar:
 
 if st.session_state['processed_data'] is not None:
     df = st.session_state['processed_data']
+    
+    # --- HOTFIX: Force clean columns to prevent cached bad data ---
+    # remove \ and * just in case old session state data is used
+    if df is not None:
+        import re
+        def clean_col_app(c):
+             return re.sub(r'[^\w\s\(\)\-\.]', '', c).strip()
+        df.columns = [clean_col_app(c) for c in df.columns]
+        st.session_state['processed_data'] = df # Update state
+    # -------------------------------------------------------------
+        
     st.write(f"✅ Data Loaded from {st.session_state['processed_source']}")
     
     # Unified Dropdown
