@@ -245,7 +245,8 @@ class SheetAgent:
         # 1. Coordinate Cleaning
         # The markdown might have 'Eassting' (typo) or 'Easting'
         # Let's normalize column names
-        df.columns = [c.strip() for c in df.columns]
+        # remove '\', '*' from column names to prevent JSON escape errors
+        df.columns = [c.replace('\\', '').replace('*', '').strip() for c in df.columns]
         
         # Map common misspellings or variations
         col_map = {
