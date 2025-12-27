@@ -1,7 +1,8 @@
 import streamlit as st
 import utils
 import os
-import webbrowser
+import pandas as pd
+from src.sheet_agent import SheetAgent
 
 st.set_page_config(layout="wide", page_title="Groundwater Mapper")
 
@@ -10,90 +11,123 @@ st.markdown("""
 Upload your Excel data and KMZ file to generate an interactive groundwater contour map.
 """)
 
-# Output path for the generated map - use absolute path
-# Output path - use relative path for cloud compatibility
+# Output path
 OUTPUT_MAP_PATH = "generated_map.html"
 
-with st.sidebar:
-    st.header("Data Upload")
-    excel_file = st.file_uploader("Upload Excel File (.xlsx)", type=["xlsx", "xls"])
-    kmz_file = st.file_uploader("Upload KMZ File (.kmz)", type=["kmz", "zip"], help="On mobile, you may need to rename .kmz to .zip or select 'All Files' if supported.")
-    
-    generate_btn = st.button("Generate Map", type="primary")
+# Initialize Session State for Processed Data
+if 'processed_data' not in st.session_state:
+    st.session_state['processed_data'] = None
+if 'processed_source' not in st.session_state:
+    st.session_state['processed_source'] = None
 
-if generate_btn:
-    if not excel_file:
-        st.error("Please upload an Excel file.")
+with st.sidebar:
+    st.header("1. Data Upload")
+    # API Key Handling
+    api_key = None
+    if "LLAMA_CLOUD_API_KEY" in st.secrets:
+        api_key = st.secrets["LLAMA_CLOUD_API_KEY"]
     else:
-        with st.spinner("Processing data and generating contours..."):
+        api_key = st.text_input("Llama Cloud API Key", type="password")
+    
+    excel_file = st.file_uploader("Upload Excel File (.xlsx)", type=["xlsx", "xls"])
+    kmz_file = st.file_uploader("Upload KMZ File (.kmz)", type=["kmz", "zip"], help="On mobile, use .zip")
+    
+    st.header("2. AI Processing")
+    if excel_file and api_key:
+        if st.button("Process with AI Agent", type="primary"):
+            with st.spinner("AI Agent is reading the Excel file..."):
+                try:
+                    # Save temp file for Agent
+                    with open("temp_upload.xlsx", "wb") as f:
+                        f.write(excel_file.getbuffer())
+                    
+                    # Run Agent
+                    agent = SheetAgent(api_key=api_key)
+                    # Use 'process' method which returns path to processed_data.xlsx
+                    # Note: Agent saves to 'processed_data.xlsx' locally
+                    result_path = agent.process("temp_upload.xlsx")
+                    
+                    if result_path and os.path.exists(result_path):
+                        # Load into Session State
+                        df = pd.read_excel(result_path)
+                        st.session_state['processed_data'] = df
+                        st.session_state['processed_source'] = excel_file.name
+                        st.success(f"Processed {len(df)} rows successfully!")
+                    else:
+                        st.error("Agent failed to extract data.")
+                        
+                except Exception as e:
+                    st.error(f"AI Processing failed: {e}")
+    elif not api_key:
+        st.warning("Please provide Llama Cloud API Key in Sidebar or Secrets.")
+
+if st.session_state['processed_data'] is not None:
+    df = st.session_state['processed_data']
+    st.write(f"✅ Data Loaded from {st.session_state['processed_source']}")
+    
+    # Unified Dropdown
+    st.header("3. Map Settings")
+    
+    # Filter columns to only numeric/interesting ones
+    # Exclude metadata
+    exclude = ['Well ID', 'Date', 'Time', 'Easting', 'Northing', 'MGA2020 / MGA Zone 54', 'Unknown']
+    available_cols = [c for c in df.columns if c not in exclude]
+    
+    # Default to Groundwater if available
+    default_idx = 0
+    if "Static Water Level (mAHD)" in available_cols:
+        default_idx = available_cols.index("Static Water Level (mAHD)")
+    elif "Groundwater Elevation mAHD" in available_cols:
+        default_idx = available_cols.index("Groundwater Elevation mAHD")
+        
+    selected_param = st.selectbox("Select Parameter to Visualize", available_cols, index=default_idx)
+    
+    if st.button("Generate Map", type="primary"):
+        with st.spinner(f"Generating map for {selected_param}..."):
             try:
-                st.write("📊 Processing data...")
-                
-                # 1. Process KMZ first (if provided) to get reference points
-                # This helps resolve UTM zone ambiguities using ground truth
+                # 1. Process KMZ
                 kmz_points = None
                 if kmz_file:
-                    st.write("📍 Processing KMZ file...")
                     try:
                         kmz_points = utils.extract_kmz_points(kmz_file)
-                        st.write(f"✅ KMZ processed: {len(kmz_points)} points found")
+                        st.write(f"✅ KMZ processed: {len(kmz_points)} ref points")
                     except Exception as e:
-                        st.error(f"Error processing KMZ: {e}")
-                        # Continue without KMZ points
-                
-                # 2. Process Excel using KMZ points as reference
-                st.write("📊 Processing Excel file...")
-                # Reset file pointer if needed (though Streamlit handles this usually)
-                excel_file.seek(0)
-                
-                # Pass kmz_points as reference_points to help with correct UTM zone detection
+                        st.warning(f"KMZ Error: {e}")
+
+                # 2. Process Data for Map
+                # Pass DataFrame directly to utils
                 image_base64, image_bounds, target_points, bbox_geojson = utils.process_excel_data(
-                    excel_file, 
-                    reference_points=kmz_points
+                    df, 
+                    reference_points=kmz_points,
+                    value_column=selected_param
                 )
                 
-                st.write(f"✅ Excel processed: {len(target_points)} target points found")
-                # st.write(f"📍 Image bounds: {image_bounds}")
+                # 3. Create Map
+                m = utils.create_map(
+                    image_base64, 
+                    image_bounds, 
+                    target_points, 
+                    kmz_points, 
+                    bbox_geojson,
+                    legend_label=selected_param # Dynamic Legend
+                )
                 
-                st.write("🗺️ Creating map...")
-                # Create Map
-                m = utils.create_map(image_base64, image_bounds, target_points, kmz_points, bbox_geojson)
-                
-                # Save map to file
+                # Save & Inject
                 m.save(OUTPUT_MAP_PATH)
-                st.write(f"💾 Map saved")
+                utils.inject_controls_to_html(OUTPUT_MAP_PATH, image_bounds, target_points, kmz_points, legend_label=selected_param)
                 
-                # Inject controls AFTER saving (this is required for geemap compatibility)
-                utils.inject_controls_to_html(OUTPUT_MAP_PATH, image_bounds, target_points, kmz_points)
-                st.write("✅ Controls and points injected successfully")
-                
-                st.success("Map generated successfully!")
-                
-                # --- Display Map in Streamlit ---
-                # Read the HTML file
+                # Render
                 with open(OUTPUT_MAP_PATH, 'r', encoding='utf-8') as f:
                     map_html = f.read()
-
-                # Display download button
-                st.download_button(
-                    label="📥 Download Map (HTML)",
-                    data=map_html,
-                    file_name="groundwater_map.html",
-                    mime="text/html"
-                )
-
-                # Embed the map
+                    
+                st.download_button("📥 Download Map", map_html, "groundwater_map.html", "text/html")
                 st.components.v1.html(map_html, height=800, scrolling=True)
                 
             except Exception as e:
-                st.error(f"An error occurred: {e}")
-                st.exception(e)
-                
-            except Exception as e:
-                st.error(f"An error occurred: {e}")
-                st.exception(e)
+                st.error(f"Map Generation Error: {e}")
+
 else:
-    st.info("Upload files and click 'Generate Map' to start.")
+    st.info("👈 Upload Excel and click 'Process with AI Agent' to start.")
 
 
 

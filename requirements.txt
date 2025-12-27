@@ -12,3 +12,5 @@ openpyxl
 pyproj
 geemap
 google-auth
+llama-parse
+llama-index-core

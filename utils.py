@@ -270,14 +270,15 @@ def auto_detect_utm_zone(df, reference_points=None):
     return best_match['epsg'], best_confidence, best_match
 
 
-def process_excel_data(file, interpolation_method='linear', reference_points=None):
+def process_excel_data(file, interpolation_method='linear', reference_points=None, value_column='Groundwater Elevation mAHD'):
     """
-    Reads Excel file, interpolates groundwater data, and generates a contour image.
+    Reads Excel file (or DataFrame), interpolates data, and generates a contour image.
     
     Args:
-        file: Excel file path or object
+        file: Excel file path, object, or pandas DataFrame
         interpolation_method: 'linear' or 'cubic'
         reference_points: Optional list of points (e.g. from KMZ) to help with zone detection
+        value_column: The specific column to map (default: 'Groundwater Elevation mAHD')
         
     Returns:
         - image_base64: Base64 encoded PNG image of the contour.
@@ -285,21 +286,28 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
         - target_points: List of dictionaries for target points (lat, lon, id).
         - bbox_geojson: GeoJSON of the bounding box.
     """
-    df = pd.read_excel(file)
+    if isinstance(file, pd.DataFrame):
+        df = file.copy()
+    else:
+        df = pd.read_excel(file)
+        
     df.columns = df.columns.str.strip()
 
     # Filter data (same logic as original)
     if 'Name' in df.columns and df['Name'].astype(str).str.contains('TOC1', na=False).any():
         df = df[df['Name'].str.contains('TOC1', na=False)].copy()
 
-    if 'Groundwater Elevation mAHD' in df.columns:
-        df = df[df['Groundwater Elevation mAHD'].notna()]
-        df = df[df['Groundwater Elevation mAHD'] != '-']
+    target_col = value_column
+    if target_col not in df.columns:
+        raise ValueError(f"Column '{target_col}' not found in data.")
+
+    df = df[df[target_col].notna()]
+    df = df[df[target_col] != '-']
 
     df['Easting'] = pd.to_numeric(df['Easting'], errors='coerce')
     df['Northing'] = pd.to_numeric(df['Northing'], errors='coerce')
-    df['Groundwater Elevation mAHD'] = pd.to_numeric(df['Groundwater Elevation mAHD'], errors='coerce')
-    df = df.dropna(subset=['Easting', 'Northing', 'Groundwater Elevation mAHD'])
+    df[target_col] = pd.to_numeric(df[target_col], errors='coerce')
+    df = df.dropna(subset=['Easting', 'Northing', target_col])
 
     if df.empty:
         raise ValueError("No valid data found in Excel file.")
@@ -332,7 +340,7 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     # Interpolation
     grid_z = griddata(
         points=(df['Easting'], df['Northing']),
-        values=df['Groundwater Elevation mAHD'],
+        values=df[target_col],
         xi=(grid_x, grid_y),
         method=interpolation_method
     )
@@ -342,7 +350,7 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     # if np.any(mask_nan):
     #     grid_z_nearest = griddata(
     #         points=(df['Easting'], df['Northing']),
-    #         values=df['Groundwater Elevation mAHD'],
+    #         values=df[target_col],
     #         xi=(grid_x, grid_y),
     #         method='nearest'
     #     )
@@ -354,15 +362,18 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     u = -dz_dx / (magnitude + 1e-10)
     v = -dz_dy / (magnitude + 1e-10)
 
-    z_min, z_max = df['Groundwater Elevation mAHD'].min(), df['Groundwater Elevation mAHD'].max()
+    z_min, z_max = df[target_col].min(), df[target_col].max()
     z_range = z_max - z_min
     interval = 1.0 if z_range > 10 else 0.5 if z_range > 5 else 0.2 if z_range > 2 else 0.1 if z_range > 1 else 0.05 if z_range > 0.5 else 0.01
 
-    contour_levels = np.arange(
-        np.floor(z_min / interval) * interval,
-        np.ceil(z_max / interval) * interval + interval,
-        interval
-    )
+    if z_range == 0:
+        contour_levels = [z_min]
+    else:
+        contour_levels = np.arange(
+            np.floor(z_min / interval) * interval,
+            np.ceil(z_max / interval) * interval + interval,
+            interval
+        )
 
     fig, ax = plt.subplots(figsize=(12, 8), facecolor='none', dpi=300)
     ax.patch.set_alpha(0)
@@ -454,7 +465,7 @@ def extract_kmz_points(kmz_file):
         
     return points
 
-def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_geojson=None):
+def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_geojson=None, legend_label="Groundwater Elevation (mAHD)"):
     """
     Creates an interactive GEE-based map with contour overlay.
     Points are added via JavaScript injection for full interactivity.
@@ -506,11 +517,18 @@ def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_
     return m
 
 
-def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=None):
+def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=None, legend_label="Elevation"):
     """
-    Injects JavaScript controls into an already-saved HTML file.
-    This must be called AFTER the map is saved to guarantee the JS is included.
+    Injects JavaScript into HTML. Now supports dynamic legend label.
     """
+    # Shorten label for legend if too long
+    legend_label_short = legend_label
+    if len(legend_label) > 15:
+        # e.g. "Nitrate as N" -> "Nitrate..." if extremely long, but "Nitrate as N" is fine.
+        # "Groundwater Elevation mAHD" -> "GW Elev..."
+        if "Elevation" in legend_label: legend_label_short = "Elevation"
+        else: legend_label_short = legend_label.split(' ')[0]
+
     with open(html_file, "r", encoding="utf-8") as f:
         html = f.read()
     
@@ -644,11 +662,11 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
   <div style="font-weight:bold; margin-bottom:6px; margin-top:8px; border-top:1px solid #ddd; padding-top:6px;">How to Read Contour</div>
   <div style="display:flex; align-items:center; margin-bottom:4px;">
     <div style="width:20px; height:10px; background:linear-gradient(to right, #fde725, #5ec962); margin-right:8px; border:1px solid #999;"></div>
-    <span>High Elevation (Yellow)</span>
+    <span>High {legend_label_short} (Yellow)</span>
   </div>
   <div style="display:flex; align-items:center; margin-bottom:4px;">
     <div style="width:20px; height:10px; background:linear-gradient(to right, #3b528b, #440154); margin-right:8px; border:1px solid #999;"></div>
-    <span>Low Elevation (Purple)</span>
+    <span>Low {legend_label_short} (Purple)</span>
   </div>
   <div style="display:flex; align-items:center;">
     <div style="font-size:16px; color:red; font-weight:bold; margin-right:8px; line-height:10px;">&rarr;</div>
