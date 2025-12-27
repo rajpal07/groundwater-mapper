@@ -10,11 +10,24 @@ from zipfile import ZipFile
 from pykml import parser
 from shapely.geometry import Point, box, mapping
 import geopandas as gpd
+import os
+import json
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+from scipy.interpolate import griddata
+from pyproj import Transformer
+from zipfile import ZipFile
+from pykml import parser
+from shapely.geometry import Point, box, mapping
+import geopandas as gpd
 import ee
 import streamlit as st
 from google.oauth2.service_account import Credentials
-print("DEBUG: Loading utils.py - Version ScaleFix_v3")
+print("DEBUG: Loading utils.py - Version RestoreEE_v2")
 import geemap.foliumap as geemap
+import geemap.coreutils # Import coreutils explicitly for patching
 import folium
 from folium.raster_layers import ImageOverlay
 import io
@@ -41,8 +54,9 @@ def init_earth_engine():
             if "EARTHENGINE_TOKEN" in os.environ:
                 os.environ.pop("EARTHENGINE_TOKEN")
             
-            # Create credentials
-            credentials = Credentials.from_service_account_info(service_account_info)
+            # Create credentials with correct EE Scope
+            scopes = ['https://www.googleapis.com/auth/earthengine']
+            credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
             
             # Initialize with credentials
             ee.Initialize(credentials=credentials, project=GEE_PROJECT_ID)
@@ -64,6 +78,8 @@ def init_earth_engine():
 
 # Initialize GEE on import
 init_earth_engine()
+
+# === UTM Zone Detection Functions ===
 
 # === UTM Zone Detection Functions ===
 
@@ -486,20 +502,18 @@ def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_
         # Check if EE is alive
         ee.Image(0).getInfo()
         # If alive, disable geemap's init trigger
-        print("EE already active. Patching geemap to skip init.")
-        _original_init = geemap.coreutils.ee_initialize
+        print("EE already active. Aggressively patching geemap to skip init.")
+        
+        # Patch coreutils (imported at top level now)
         geemap.coreutils.ee_initialize = lambda *args, **kwargs: None
-        geemap.foliumap.ee_initialize = lambda *args, **kwargs: None
+        
+        # Patch the module we interact with directly
+        geemap.ee_initialize = lambda *args, **kwargs: None
+        
     except Exception as e:
-        print(f"EE not active, letting geemap try init: {e}")
+        print(f"EE not active, letting geemap try init (expect errors if secrets missing): {e}")
 
     m = geemap.Map(center=[center_lat, center_lon], zoom=16, basemap='SATELLITE', max_zoom=19, zoom_control=False, attributionControl=False)
-    
-    # Restore (optional, but polite)
-    # geemap.coreutils.ee_initialize = _original_init
-    # --------------------------------------------------
-    
-    # Add layer control moved to end
 
 
     # Add contour overlay
