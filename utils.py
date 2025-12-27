@@ -478,7 +478,26 @@ def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_
         center_lat, center_lon = 0, 0
 
     # Create GEE map with satellite basemap - Controls disabled
+    
+    # --- HOTFIX: Prevent geemap from confusing Auth ---
+    # Since we manually initialized EE with Service Account, we must stop geemap from trying to re-init
+    # which causes 'KeyError: client_secret' on Cloud.
+    try:
+        # Check if EE is alive
+        ee.Image(0).getInfo()
+        # If alive, disable geemap's init trigger
+        print("EE already active. Patching geemap to skip init.")
+        _original_init = geemap.coreutils.ee_initialize
+        geemap.coreutils.ee_initialize = lambda *args, **kwargs: None
+        geemap.foliumap.ee_initialize = lambda *args, **kwargs: None
+    except Exception as e:
+        print(f"EE not active, letting geemap try init: {e}")
+
     m = geemap.Map(center=[center_lat, center_lon], zoom=16, basemap='SATELLITE', max_zoom=19, zoom_control=False, attributionControl=False)
+    
+    # Restore (optional, but polite)
+    # geemap.coreutils.ee_initialize = _original_init
+    # --------------------------------------------------
     
     # Add layer control moved to end
 

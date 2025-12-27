@@ -45,10 +45,26 @@ def test_agent():
             print(f"   -> Processed successfully. Points: {len(points)}")
             
             # Skip geemap.Map due to auth issues in test env
-            # Mock map saving
-            print("   -> Mocking map save...")
-            with open("test_map_gw.html", "w", encoding="utf-8") as f:
-                f.write("<html><body><div class='folium-map'></div></body></html>")
+            # NOW RE-ENABLING TO TEST AUTH FIX
+            print("   -> Testing Map Creation (Auth Check)...")
+            
+            # Mock streamlit secrets from file
+            import toml
+            try:
+                secrets = toml.load(".streamlit/secrets.toml")
+                # Mock streamlit.secrets
+                import streamlit as st
+                st.secrets = secrets
+                
+                # Create map REAL
+                m = utils.create_map(img, bounds, points, bbox_geojson=bbox, legend_label="Groundwater Level")
+                m.save("test_map_gw.html")
+                print("   -> Map created and saved successfully (Auth worked!)")
+            except Exception as e:
+                print(f"   -> Map Creation FAILED (likely Auth): {e}")
+                # Fallback for HTML injection test only
+                with open("test_map_gw.html", "w", encoding="utf-8") as f:
+                    f.write("<html><body><div class='folium-map'></div></body></html>")
             
             # Test Injection
             utils.inject_controls_to_html("test_map_gw.html", bounds, points, legend_label="Groundwater Level")
