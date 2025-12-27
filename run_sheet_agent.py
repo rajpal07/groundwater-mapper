@@ -67,9 +67,9 @@ def test_agent():
                 print(f"   -> Map Creation Warning: {e}")
 
             # ------------------------------------------------------------------
-            # 3. VERIFICATION: Test Chemical Optimization (No Contours)
+            # 3. VERIFICATION: Test Chemical Optimization (No Contour Lines/Arrows)
             # ------------------------------------------------------------------
-            print("\n3. Testing Optimization (Chemicals should SKIP contours)...")
+            print("\n3. Testing Optimization (Chemicals should have colors but NO lines/arrows)...")
             try:
                 # Pick a chemical column
                 chem_col = "Chloride" 
@@ -80,14 +80,16 @@ def test_agent():
                 # Manually call process_excel_data with contour flag = False (simulating app behavior)
                 # In app.py: should_generate_contours = "Water Level" in param ...
                 should_gen = "Water Level" in chem_col or "Elevation" in chem_col
-                print(f"   Should Generate Contours? {should_gen}")
+                print(f"   Should Generate Contour Lines/Arrows? {should_gen}")
                 
                 img, bounds, pts, box = utils.process_excel_data(df, value_column=chem_col, generate_contours=should_gen)
                 
-                if img is None and bounds is None:
-                    print("   -> SUCCESS: Contours skipped for chemical (Optimization working).")
+                # Now we ALWAYS generate an image (colored visualization)
+                # The optimization is that contour lines and streamplot arrows are skipped
+                if img is not None and bounds is not None:
+                    print("   -> SUCCESS: Colored visualization generated (contour lines/arrows conditionally added).")
                 else:
-                    print("   -> FAILURE: Contours generated despite optimization flag!")
+                    print("   -> FAILURE: Image generation failed!")
                     
             except Exception as e:
                 print(f"   -> Optimization Test Error: {e}")

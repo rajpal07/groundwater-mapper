@@ -326,85 +326,69 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     transformer = Transformer.from_crs(selected_epsg, "EPSG:4326", always_xy=True)
 
     # -------------------------------------------------------------
-    # OPTIMIZATION: Skip Heavy Interpolation if generate_contours=False
+    # ALWAYS Generate Interpolation & Colored Visualization
+    # Conditionally add contour lines and streamplot arrows
     # -------------------------------------------------------------
     
-    image_base64 = None
-    image_bounds = None
-    min_lon, min_lat, max_lon, max_lat = 0, 0, 0, 0
+    # Interpolation grid
+    # Increase density for smoother contours
+    xi = np.linspace(df['Easting'].min(), df['Easting'].max(), 200)
+    yi = np.linspace(df['Northing'].min(), df['Northing'].max(), 200)
+    grid_x, grid_y = np.meshgrid(xi, yi)
+    
+    # Reproject grid corners to get lat/lon bounds for the IMAGE
+    min_easting, max_easting = grid_x.min(), grid_x.max()
+    min_northing, max_northing = grid_y.min(), grid_y.max()
+    
+    # Transform corners
+    min_lon, min_lat = transformer.transform(min_easting, min_northing)
+    max_lon, max_lat = transformer.transform(max_easting, max_northing)
+    
+    # Folium expects [[lat_min, lon_min], [lat_max, lon_max]]
+    image_bounds = [[min_lat, min_lon], [max_lat, max_lon]]
 
+    # Interpolation
+    grid_z = griddata(
+        points=(df['Easting'], df['Northing']),
+        values=df[target_col],
+        xi=(grid_x, grid_y),
+        method=interpolation_method
+    )
+
+    # Generate Contour Image
+    z_min, z_max = df[target_col].min(), df[target_col].max()
+    z_range = z_max - z_min
+    
+    # Avoid zero range
+    if z_range == 0: z_range = 1
+    
+    levels = np.linspace(z_min, z_max, 20)
+    
+    # Plot
+    fig, ax = plt.subplots(figsize=(10, 10))
+    # Filled contours (Visuals) - Always show colored gradient
+    contour_filled = ax.contourf(grid_x, grid_y, grid_z, levels=levels, cmap='viridis', alpha=0.6)
+    
+    # Contour lines and streamplot - Only for groundwater/elevation
     if generate_contours:
-        # Interpolation grid
-        # Increase density for smoother contours
-        xi = np.linspace(df['Easting'].min(), df['Easting'].max(), 200)
-        yi = np.linspace(df['Northing'].min(), df['Northing'].max(), 200)
-        grid_x, grid_y = np.meshgrid(xi, yi)
-        
-        # Reproject grid corners to get lat/lon bounds for the IMAGE
-        min_easting, max_easting = grid_x.min(), grid_x.max()
-        min_northing, max_northing = grid_y.min(), grid_y.max()
-        
-        # Transform corners
-        min_lon, min_lat = transformer.transform(min_easting, min_northing)
-        max_lon, max_lat = transformer.transform(max_easting, max_northing)
-        
-        # Folium expects [[lat_min, lon_min], [lat_max, lon_max]]
-        image_bounds = [[min_lat, min_lon], [max_lat, max_lon]]
-
-        # Interpolation
-        grid_z = griddata(
-            points=(df['Easting'], df['Northing']),
-            values=df[target_col],
-            xi=(grid_x, grid_y),
-            method=interpolation_method
-        )
-
-        # Generate Contour Image
-        dz_dx, dz_dy = np.gradient(grid_z)
-        magnitude = np.sqrt(dz_dx**2 + dz_dy**2)
-        u = -dz_dx / (magnitude + 1e-10)
-        v = -dz_dy / (magnitude + 1e-10)
-
-        z_min, z_max = df[target_col].min(), df[target_col].max()
-        z_range = z_max - z_min
-        
-        # Avoid zero range
-        if z_range == 0: z_range = 1
-        
-        levels = np.linspace(z_min, z_max, 20)
-        
-        # Plot
-        fig, ax = plt.subplots(figsize=(10, 10))
-        # Filled contours (Visuals)
-        contour_filled = ax.contourf(grid_x, grid_y, grid_z, levels=levels, cmap='viridis', alpha=0.6)
         # Contour lines (Structure)
         contour_lines = ax.contour(grid_x, grid_y, grid_z, levels=levels, colors='black', linewidths=0.5, alpha=0.5)
         
         # Streamplot for flow direction
+        dz_dx, dz_dy = np.gradient(grid_z)
+        magnitude = np.sqrt(dz_dx**2 + dz_dy**2)
+        u = -dz_dx / (magnitude + 1e-10)
+        v = -dz_dy / (magnitude + 1e-10)
         stream = ax.streamplot(grid_x, grid_y, u, v, color='red', density=1.0, linewidth=1.0, arrowsize=1.5)
 
-        ax.axis('off')
-        plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
-        
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', transparent=True, bbox_inches='tight', pad_inches=0)
-        plt.close()
-        buf.seek(0)
-        image_base64 = base64.b64encode(buf.read()).decode('utf-8')
-
-    else:
-        # Just calculate bounds from data points for BBox
-        lons, lats = transformer.transform(df['Easting'].values, df['Northing'].values)
-        min_lon, max_lon = min(lons), max(lons)
-        min_lat, max_lat = min(lats), max(lats)
-        # Add slight padding
-        lat_pad = (max_lat - min_lat) * 0.1
-        lon_pad = (max_lon - min_lon) * 0.1
-        min_lat -= lat_pad; max_lat += lat_pad
-        min_lon -= lon_pad; max_lon += lon_pad
-        
-        # No image bounds needed if no image
-        image_bounds = None
+    ax.axis('off')
+    plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', transparent=True, bbox_inches='tight', pad_inches=0)
+    plt.close()
+    buf.seek(0)
+    image_base64 = base64.b64encode(buf.read()).decode('utf-8')
 
     # Target Points (Lat/Lon) with Borewell Names
     target_lons, target_lats = transformer.transform(df['Easting'].values, df['Northing'].values)
@@ -509,18 +493,17 @@ def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_
     # print(f"DEBUG: Map Attributes: {dir(m)[:10]}...") # Inspect first few attributes
 
 
-    # Add contour overlay (only if generated)
-    if image_base64 and image_bounds:
-        img_url = f"data:image/png;base64,{image_base64}"
-        ImageOverlay(
-            image=img_url,
-            bounds=image_bounds,
-            opacity=0.7,
-            interactive=False,
-            cross_origin=True,
-            zindex=1,
-            name="Groundwater Contour"
-        ).add_to(m)
+    # Add contour overlay
+    img_url = f"data:image/png;base64,{image_base64}"
+    ImageOverlay(
+        image=img_url,
+        bounds=image_bounds,
+        opacity=0.7,
+        interactive=False,
+        cross_origin=True,
+        zindex=1,
+        name="Groundwater Contour"
+    ).add_to(m)
 
     # Add bounding box if provided
     if bbox_geojson:
