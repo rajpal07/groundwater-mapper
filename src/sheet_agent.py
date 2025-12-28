@@ -40,24 +40,34 @@ class SheetAgent:
         
         lines = markdown_text.split('\n')
         
-        # 1. Locate Attachment 3
+        # 1. Locate Table Start (Dynamic)
+        # Strategy: Search for a row containing "Well ID" AND ("Easting" or "Northing")
+        # This handles files where "Attachment 3" is missing or on different rows.
+        
         start_index = -1
+        signature_found = False
+        
         for i, line in enumerate(lines):
-            if "Attachment 3" in line:
-                print(f"DEBUG: Found target section '{line.strip()}' at line {i}")
+            # Check for Header Signature
+            # Note: LlamaParse tables are pipe-delimited
+            if "Well ID" in line and ("Easting" in line or "Northing" in line or "Eassting" in line):
+                print(f"DEBUG: Found Header Signature at line {i}: '{line.strip()[:50]}...'")
                 start_index = i
+                signature_found = True
                 break
-        
+                
         if start_index == -1:
-            print("Warning: 'Attachment 3' not found using exact string. Searching for similar headers.")
-            # Fallback: look for 'Well ID' directly
-            for i, line in enumerate(lines):
-                if "|Well ID|" in line:
-                    start_index = i - 5 # Give some buffer
-                    break
-        
+             print("Warning: Could not find table with 'Well ID' + 'Easting/Northing'. Checking for just 'Well ID'...")
+             # Fallback: Just "Well ID" (maybe coordinates are on next row)
+             for i, line in enumerate(lines):
+                 if "|Well ID|" in line or "| Well ID |" in line:
+                     start_index = i
+                     signature_found = True
+                     print(f"DEBUG: Found potential header at line {i}")
+                     break
+
         if start_index == -1:
-             raise ValueError("Could not find Attachment 3 or Well ID table.")
+             raise ValueError("Could not find Chemical Data Table (looked for 'Well ID').")
 
         # 2. Find the specific Header Rows
         # Row 1: |Well ID|Sample Date|...|MGA2020...|...
@@ -67,36 +77,73 @@ class SheetAgent:
         header_row_2 = None
         data_start_index = -1
         
+        # 2. Extract Headers
+        # We start looking from start_index.
+        
+        header_row_1 = None
+        header_row_2 = None
+        data_start_index = -1
+        
         current_idx = start_index
-        while current_idx < len(lines):
-            line = lines[current_idx].strip()
-            if line.startswith("|Well ID"):
-                # Use slicing [1:-1] to remove first/last pipe only, preserving internal empty structure
-                # Ensure we handle lines that might not strictly end with pipe by checking
-                clean_line = line.strip()
-                if clean_line.startswith('|'): clean_line = clean_line[1:]
-                if clean_line.endswith('|'): clean_line = clean_line[:-1]
-                
-                header_row_1 = [c.strip() for c in clean_line.split('|')]
-                
-                # Look ahead for sub-header
-                offset = 1
-                while current_idx + offset < len(lines):
-                    next_line = lines[current_idx + offset].strip()
-                    if "Eassting" in next_line or "Easting" in next_line or "Northing" in next_line:
-                         clean_next = next_line.strip()
-                         if clean_next.startswith('|'): clean_next = clean_next[1:]
-                         if clean_next.endswith('|'): clean_next = clean_next[:-1]
-                         
-                         header_row_2 = [c.strip() for c in clean_next.split('|')]
-                         data_start_index = current_idx + offset + 1
-                         break
-                    offset += 1
-                break
-            current_idx += 1
+        # Limit search to next 5 lines to find the sub-header
+        for offset in range(0, 5): 
+            if current_idx + offset >= len(lines): break
             
-        if not header_row_1 or not header_row_2:
-            raise ValueError("Could not find Multi-Row Headers (Well ID + Coordinates).")
+            line = lines[current_idx + offset].strip()
+            
+            # Identify Main Header
+            if "Well ID" in line:
+                # Robust split ensuring we keep empty attributes
+                raw_cells = line.strip().split('|')
+                # Markdown tables usually start/end with | so first/last split are empty
+                if len(raw_cells) > 0 and raw_cells[0].strip() == '': raw_cells.pop(0)
+                if len(raw_cells) > 0 and raw_cells[-1].strip() == '': raw_cells.pop(-1)
+                header_row_1 = [c.strip() for c in raw_cells]
+                
+                # Look for Sub-Header (Easting/Northing OR Latitude/Longitude)
+                
+                # Check next line
+                next_offset = 1
+                while current_idx + offset + next_offset < len(lines):
+                    next_line = lines[current_idx + offset + next_offset].strip()
+                    if "---" in next_line: # Skip separator
+                        next_offset += 1
+                        continue
+                        
+                    is_sub_header = False
+                    if "Easting" in next_line or "Northing" in next_line or "Eassting" in next_line:
+                        is_sub_header = True
+                    elif "Latitude" in next_line or "Longitude" in next_line:
+                        is_sub_header = True
+                        
+                    if is_sub_header:
+                         raw_next = next_line.strip().split('|')
+                         if len(raw_next) > 0 and raw_next[0].strip() == '': raw_next.pop(0)
+                         if len(raw_next) > 0 and raw_next[-1].strip() == '': raw_next.pop(-1)
+                         header_row_2 = [c.strip() for c in raw_next]
+                         data_start_index = current_idx + offset + next_offset + 1
+                         break
+                    else:
+                        # Maybe single row header?
+                        # If next line is data (starts with pipe but no keywords), stop
+                        break
+                    next_offset += 1
+                
+                if not header_row_2:
+                    # Assume Single Row Header if E/N/Lat/Lon are in Row 1
+                    if any(x in line for x in ["Easting", "Northing", "Latitude", "Longitude"]):
+                        header_row_2 = [""] * len(header_row_1) # Dummy
+                        data_start_index = current_idx + offset + 1
+                        if current_idx + offset + 1 < len(lines) and "---" in lines[current_idx + offset + 1]:
+                            data_start_index += 1
+                break
+
+        if not header_row_1:
+             raise ValueError("Found start but failed to parse Headers.")
+        
+        # If still no header 2, we might fail later, but let's try proceed
+        if not header_row_2:
+             header_row_2 = [""] * len(header_row_1)
 
         print("Headers found. processing columns...")
         
@@ -164,17 +211,28 @@ class SheetAgent:
         Extracts 'Attachment 1' table (Groundwater Levels).
         Target Columns: Well ID, Static Water Level (mAHD)
         """
-        print("Extracting Groundwater Levels from Attachment 1...")
+        print("Extracting Groundwater Levels...")
         lines = markdown_text.split('\n')
         
         start_index = -1
+        # Priority 1: Attachment 1
         for i, line in enumerate(lines):
             if "Attachment 1" in line:
                 start_index = i
+                print("DEBUG: Found 'Attachment 1' for Groundwater.")
                 break
         
+        # Priority 2: Fallback - Search for "Static Water Level" anywhere
         if start_index == -1:
-            print("Warning: Attachment 1 not found. Skipping groundwater data.")
+             print("Warning: Attachment 1 not found. Scanning globally for 'Static Water Level'...")
+             for i, line in enumerate(lines):
+                  if "Static Water Level" in line and "Well ID" in line:
+                      start_index = i - 1 # Assumption: header is near
+                      print(f"DEBUG: Found Groundwater Header at line {i}")
+                      break
+
+        if start_index == -1:
+            print("Warning: Groundwater headers not found in file. Skipping GW data.")
             return pd.DataFrame()
 
         # Find header row
@@ -183,13 +241,16 @@ class SheetAgent:
         target_col = "Static Water Level (mAHD)"
         well_col = "Well ID"
         
-        for i in range(start_index, len(lines)):
+        # Search forward from start_index (limit 20 lines)
+        for i in range(start_index, min(len(lines), start_index + 50)):
             if target_col in lines[i] and well_col in lines[i]:
                 header_index = i
                 break
+            # Relaxed match: maybe just 'Water Level' if 'mAHD' is missing? 
+            # Sticking to exact match for now as per user instruction "Static Water Level (mAHD)"
         
         if header_index == -1:
-             print("Warning: Groundwater headers not found.")
+             print("Warning: Groundwater headers match failed.")
              return pd.DataFrame()
 
         # Parse Header
@@ -201,7 +262,7 @@ class SheetAgent:
         # Identify indices
         try:
             well_idx = next(i for i, h in enumerate(headers) if "Well ID" in h)
-            gw_idx = next(i for i, h in enumerate(headers) if "Static Water Level (mAHD)" in h)
+            gw_idx = next(i for i, h in enumerate(headers) if "Static Water Level" in h)
         except StopIteration:
             print("Warning: Critical columns missing in Attachment 1.")
             return pd.DataFrame()
@@ -212,7 +273,9 @@ class SheetAgent:
         for i in range(header_index + 1, len(lines)):
             line = lines[i].strip()
             if not line: continue
-            if "Attachment" in line or line.startswith("#"): break # Next section
+            if "Attachment" in line or line.startswith("#"): 
+                # If we are far from header, this is likely end of table
+                if i > header_index + 5: break 
             
             if not line.startswith("|"): continue
             if "---" in line: continue
@@ -243,14 +306,22 @@ class SheetAgent:
         """
         print("Cleaning data...")
         
+        # Deduplicate columns first
+        if df.columns.duplicated().any():
+            print(f"Warning: Duplicate columns found: {df.columns[df.columns.duplicated()].tolist()}. Removing duplicates.")
+            df = df.loc[:, ~df.columns.duplicated()]
+        
         # 1. Coordinate Cleaning
         # The markdown might have 'Eassting' (typo) or 'Easting'
         # Let's normalize column names
         # STRICT CLEANING: remove anything that isn't alphanumeric, space, or parens
         # This removes \* \ etc that cause JSON escape errors
         def clean_col(col_name):
-            # Keep letters, numbers, spaces, (), -, _
-            return re.sub(r'[^\w\s\(\)\-\.]', '', col_name).strip()
+            # Special case for GW level to ensure exact match if desired, 
+            # but usually the regex below keeps () which is good.
+            # re.sub(r'[^\w\s\(\)\-\.]', '', col_name) keeps ( and )
+            cleaned = re.sub(r'[^\w\s\(\)\-\.]', '', col_name).strip()
+            return cleaned
 
         df.columns = [clean_col(c) for c in df.columns]
         
@@ -259,10 +330,21 @@ class SheetAgent:
             'Eassting': 'Easting',
             'Northing': 'Northing',
             'Well ID': 'Well ID',
-            'Sample Date': 'Date'
+            'Sample Date': 'Date',
+            'Latitude': 'Latitude',
+            'Longitude': 'Longitude',
+            'Static Water Level': 'Static Water Level (mAHD)', # Normalize variations
+            'Static Water Level mAHD': 'Static Water Level (mAHD)'
         }
         
+        # Apply map if key is found (exact or close?)
+        # For now, precise rename
         df = df.rename(columns=col_map)
+        
+        # Deduplicate columns (Handle rename collisions)
+        if df.columns.duplicated().any():
+            print(f"Warning: Duplicate columns found after rename: {df.columns[df.columns.duplicated()].tolist()}. Keeping first.")
+            df = df.loc[:, ~df.columns.duplicated()]
         
         # 2. Convert Numeric Columns
         # Identify columns that should be numeric (Easting, Northing, Chemicals)
@@ -275,9 +357,18 @@ class SheetAgent:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
         
         # 3. Drop rows where Well ID or Coordinates are missing
+        # Check for E/N OR Lat/Lon
+        has_coords = False
         if 'Easting' in df.columns and 'Northing' in df.columns:
             df = df.dropna(subset=['Easting', 'Northing'])
-        
+            has_coords = True
+        elif 'Latitude' in df.columns and 'Longitude' in df.columns:
+            df = df.dropna(subset=['Latitude', 'Longitude'])
+            has_coords = True
+            
+        if not has_coords:
+             print("Warning: No valid coordinate columns (Easting/Northing or Lat/Lon) found.")
+       
         print("Data cleaning complete.")
         return df
 
@@ -288,16 +379,20 @@ class SheetAgent:
         print(f"Running agent on {file_path}...")
         
         # 1. Parse File
-        # Changed parse_excel to parse_raw_file
-        if not os.path.exists("llama_parse_output.md"):
+        # Cache based on Filename Hash to avoid collision
+        import hashlib
+        file_hash = hashlib.md5(os.path.basename(file_path).encode()).hexdigest()
+        cache_file = f"cache_llama_{file_hash}.md"
+        
+        if not os.path.exists(cache_file):
             print("Parsing file (this may take a moment)...")
             markdown_output = self.parse_raw_file(file_path)
             # Save for debugging/caching
-            with open("llama_parse_output.md", "w", encoding="utf-8") as f:
+            with open(cache_file, "w", encoding="utf-8") as f:
                 f.write(markdown_output)
         else:
-             print("Loading cached markdown...")
-             with open("llama_parse_output.md", "r", encoding="utf-8") as f:
+             print(f"Loading cached markdown ({cache_file})...")
+             with open(cache_file, "r", encoding="utf-8") as f:
                 markdown_output = f.read()
 
         # 2. Extract Data
@@ -311,16 +406,24 @@ class SheetAgent:
             chem_df['Well ID'] = chem_df['Well ID'].astype(str).str.strip()
             gw_df['Well ID'] = gw_df['Well ID'].astype(str).str.strip()
             
-            # Merge left on chemical data (primary) or outer?
-            # User wants chemical data primarily, but with GW level added.
-            # "Attachment 3" is Lab data, "Attachment 1" is Insitu/Levels.
-            # We trust Attachment 3 for coordinates.
+            # Check if GW column exists in chem_df
+            gw_col = 'Static Water Level (mAHD)'
             
-            merged_df = pd.merge(chem_df, gw_df, on='Well ID', how='left')
-            final_df = merged_df
+            # Normalize column names in both DFs first for consistent checking
+            # (We usually do clean_data AFTER merge, but for checking duplicates we need to know)
+            # A quick check:
+            chem_cols = [c for c in chem_df.columns if "Static Water Level" in c]
+            
+            if chem_cols:
+                print(f"Groundwater data already in Chemical Table (Columns: {chem_cols}). Ignoring separate GW data to prevent duplicates.")
+                final_df = chem_df
+            else:
+                merged_df = pd.merge(chem_df, gw_df, on='Well ID', how='left')
+                final_df = merged_df
+                
         elif not chem_df.empty:
             final_df = chem_df
-            print("Warning: Groundwater data missing, using only chemical data.")
+            print("Warning: Groundwater data missing (or integrated), using only chemical data.")
         else:
              final_df = pd.DataFrame()
              print("Error: No data extracted.")

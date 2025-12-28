@@ -309,21 +309,36 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     df = df[df[target_col].notna()]
     df = df[df[target_col] != '-']
 
-    df['Easting'] = pd.to_numeric(df['Easting'], errors='coerce')
-    df['Northing'] = pd.to_numeric(df['Northing'], errors='coerce')
+    df['Easting'] = pd.to_numeric(df.get('Easting'), errors='coerce')
+    df['Northing'] = pd.to_numeric(df.get('Northing'), errors='coerce')
+    df['Latitude'] = pd.to_numeric(df.get('Latitude'), errors='coerce')
+    df['Longitude'] = pd.to_numeric(df.get('Longitude'), errors='coerce')
+    
     df[target_col] = pd.to_numeric(df[target_col], errors='coerce')
-    df = df.dropna(subset=['Easting', 'Northing', target_col])
+    
+    # Check if we have Easting/Northing OR Lat/Lon
+    use_utm = False
+    if df['Easting'].notna().any() and df['Northing'].notna().any():
+        df = df.dropna(subset=['Easting', 'Northing', target_col])
+        use_utm = True
+    elif df['Latitude'].notna().any() and df['Longitude'].notna().any():
+        df = df.dropna(subset=['Latitude', 'Longitude', target_col])
+        use_utm = False
+    else:
+        raise ValueError("No valid coordinates (Easting/Northing or Latitude/Longitude) found.")
 
     if df.empty:
         raise ValueError("No valid data found in Excel file.")
 
     # Auto-detect UTM zone using enhanced algorithm
-    # Supports all Australian zones (49S-56S) with mathematical calculation
-    # Uses reference_points (if provided) to resolve zone ambiguity
-    selected_epsg, confidence, zone_info = auto_detect_utm_zone(df, reference_points)
-    
-    # Create transformer
-    transformer = Transformer.from_crs(selected_epsg, "EPSG:4326", always_xy=True)
+    transformer = None
+    if use_utm:
+        selected_epsg, confidence, zone_info = auto_detect_utm_zone(df, reference_points)
+        transformer = Transformer.from_crs(selected_epsg, "EPSG:4326", always_xy=True)
+    else:
+        print("Using existing Latitude/Longitude coordinates.")
+        # Create a dummy transformer that just passes through? No, handle logic below.
+        pass
 
     # -------------------------------------------------------------
     # ALWAYS Generate Interpolation & Colored Visualization
@@ -331,25 +346,34 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     # -------------------------------------------------------------
     
     # Interpolation grid
-    # Increase density for smoother contours
-    xi = np.linspace(df['Easting'].min(), df['Easting'].max(), 200)
-    yi = np.linspace(df['Northing'].min(), df['Northing'].max(), 200)
+    if use_utm:
+        x_col, y_col = 'Easting', 'Northing'
+    else:
+        x_col, y_col = 'Longitude', 'Latitude'
+
+    xi = np.linspace(df[x_col].min(), df[x_col].max(), 200)
+    yi = np.linspace(df[y_col].min(), df[y_col].max(), 200)
     grid_x, grid_y = np.meshgrid(xi, yi)
     
     # Reproject grid corners to get lat/lon bounds for the IMAGE
-    min_easting, max_easting = grid_x.min(), grid_x.max()
-    min_northing, max_northing = grid_y.min(), grid_y.max()
+    min_x, max_x = grid_x.min(), grid_x.max()
+    min_y, max_y = grid_y.min(), grid_y.max()
     
-    # Transform corners
-    min_lon, min_lat = transformer.transform(min_easting, min_northing)
-    max_lon, max_lat = transformer.transform(max_easting, max_northing)
+    if use_utm:
+        # Transform corners from UTM to Lat/Lon
+        min_lon, min_lat = transformer.transform(min_x, min_y)
+        max_lon, max_lat = transformer.transform(max_x, max_y)
+    else:
+        # Already Lat/Lon
+        min_lon, min_lat = min_x, min_y
+        max_lon, max_lat = max_x, max_y
     
     # Folium expects [[lat_min, lon_min], [lat_max, lon_max]]
     image_bounds = [[min_lat, min_lon], [max_lat, max_lon]]
 
     # Interpolation
     grid_z = griddata(
-        points=(df['Easting'], df['Northing']),
+        points=(df[x_col], df[y_col]),
         values=df[target_col],
         xi=(grid_x, grid_y),
         method=interpolation_method
@@ -391,7 +415,11 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     image_base64 = base64.b64encode(buf.read()).decode('utf-8')
 
     # Target Points (Lat/Lon) with Borewell Names
-    target_lons, target_lats = transformer.transform(df['Easting'].values, df['Northing'].values)
+    if use_utm:
+        target_lons, target_lats = transformer.transform(df['Easting'].values, df['Northing'].values)
+    else:
+        target_lons = df['Longitude'].values
+        target_lats = df['Latitude'].values
     
     # helper to safely get name
     def get_point_name(row, idx):
