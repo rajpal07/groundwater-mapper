@@ -379,9 +379,12 @@ class SheetAgent:
         print(f"Running agent on {file_path}...")
         
         # 1. Parse File
-        # Cache based on Filename Hash to avoid collision
+        # Cache based on FILE CONTENT Hash to avoid collision for 'temp_upload.xlsx'
         import hashlib
-        file_hash = hashlib.md5(os.path.basename(file_path).encode()).hexdigest()
+        with open(file_path, "rb") as f:
+            file_bytes = f.read()
+            file_hash = hashlib.md5(file_bytes).hexdigest()
+            
         cache_file = f"cache_llama_{file_hash}.md"
         
         if not os.path.exists(cache_file):
