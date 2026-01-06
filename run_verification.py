@@ -3,7 +3,7 @@ import os
 
 # Create a dummy HTML file
 dummy_html = "test_map_verify.html"
-with open(dummy_html, "w") as f:
+with open(dummy_html, "w", encoding="utf-8") as f:
     f.write("<html><body><div id='map'></div></body></html>")
 
 try:
@@ -17,7 +17,7 @@ try:
     )
     
     # Read back to verify CSS present
-    with open(dummy_html, "r") as f:
+    with open(dummy_html, "r", encoding="utf-8") as f:
         content = f.read()
         
     if ".borewell-label {" in content and "border: 1px solid #000000" in content:
