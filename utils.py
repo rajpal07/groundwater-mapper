@@ -393,17 +393,20 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     # Filled contours (Visuals) - Always show colored gradient
     contour_filled = ax.contourf(grid_x, grid_y, grid_z, levels=levels, cmap='viridis', alpha=0.6)
     
-    # Contour lines and streamplot - Only for groundwater/elevation
+    # Contour lines and Arrows - Only for groundwater/elevation
     if generate_contours:
         # Contour lines (Structure)
         contour_lines = ax.contour(grid_x, grid_y, grid_z, levels=levels, colors='black', linewidths=0.5, alpha=0.5)
         
-        # Streamplot for flow direction
+        # Quiver for flow direction (Arrows at points)
         dz_dx, dz_dy = np.gradient(grid_z)
-        magnitude = np.sqrt(dz_dx**2 + dz_dy**2)
-        u = -dz_dx / (magnitude + 1e-10)
-        v = -dz_dy / (magnitude + 1e-10)
-        stream = ax.streamplot(grid_x, grid_y, u, v, color='red', density=1.0, linewidth=1.0, arrowsize=1.5)
+        # Flip gradient for flow (high to low)
+        u = -dz_dx
+        v = -dz_dy
+        
+        # Plot Arrows (Quiver)
+        step = 10 # Sampling frequency
+        ax.quiver(grid_x[::step, ::step], grid_y[::step, ::step], u[::step, ::step], v[::step, ::step], color='red', scale=25, width=0.002)
 
     ax.axis('off')
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
