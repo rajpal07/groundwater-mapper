@@ -787,13 +787,13 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
   <!-- High Gradient -->
   <div style="display:flex; align-items:center; margin-bottom:4px;">
     <div style="width:20px; height:10px; background:linear-gradient(to right, {mid_hex}, {high_hex}); margin-right:8px; border:1px solid #999;"></div>
-    <span>High {{legend_label_short}} ({high_desc})</span>
+    <span>High {legend_label_short} ({high_desc})</span>
   </div>
   
   <!-- Low Gradient -->
   <div style="display:flex; align-items:center; margin-bottom:4px;">
     <div style="width:20px; height:10px; background:linear-gradient(to right, {low_hex}, {mid_hex}); margin-right:8px; border:1px solid #999;"></div>
-    <span>Low {{legend_label_short}} ({low_desc})</span>
+    <span>Low {legend_label_short} ({low_desc})</span>
   </div>
   
   <div style="display:flex; align-items:center;">
