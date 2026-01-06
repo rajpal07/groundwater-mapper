@@ -157,7 +157,21 @@ if st.session_state['processed_data'] is not None:
                 OUTPUT_MAP_PATH_UNIQUE = f"generated_map_{unique_id}.html"
                 
                 m.save(OUTPUT_MAP_PATH_UNIQUE)
-                utils.inject_controls_to_html(OUTPUT_MAP_PATH_UNIQUE, image_bounds, target_points, kmz_points, legend_label=selected_param, colormap=selected_cmap)
+                # Default Project Details (Configurable)
+                project_details = {
+                    "attachment_title": "Attachment 1, Figure 1 – Site Location Plan",
+                    "general_notes": "The aerial map is provided for illustrative purpose and may not reflect current site conditions.\\nBoundaries, dimensions and area shown on this plan are approximate only and subject to survey.",
+                    "drawn_by": "LC",
+                    "project": "BENDIGO LIVESTOCK\\nEXCHANGE - WALLENJOE ROAD\\nHUNTLY VICTORIA",
+                    "address": "11 MATCHETT DRIVE STRATHDALE, VICTORIA, 3550.\\nPH: (03) 5406 0522 admin@edwardsenvironmental.com.au",
+                    "drawing_title": "SITE MAP",
+                    "authorised_by": "DE",
+                    "date": "24-02-2023",
+                    "client": "CITY OF GREATER BENDIGO",
+                    "job_no": "#773-01"
+                }
+                
+                utils.inject_controls_to_html(OUTPUT_MAP_PATH_UNIQUE, image_bounds, target_points, kmz_points, legend_label=selected_param, colormap=selected_cmap, project_details=project_details)
                 
                 # Render
                 with open(OUTPUT_MAP_PATH_UNIQUE, 'r', encoding='utf-8') as f:

@@ -637,7 +637,7 @@ def get_colormap_info(cmap_name):
     return low_hex, mid_hex, high_hex, high_desc, low_desc
     
 
-def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=None, legend_label="Elevation", colormap="viridis"):
+def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=None, legend_label="Elevation", colormap="viridis", project_details=None):
     """
     Injects JavaScript into HTML. Now supports dynamic legend label.
     """
@@ -662,6 +662,23 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         initial_center = [center_lat, center_lon]
     else:
         initial_center = [0, 0]
+
+    # Default Project Details
+    if project_details is None:
+        project_details = {}
+    
+    pd_safe = {
+        "attachment_title": project_details.get("attachment_title", "Attachment 1, Figure 1 – Site Location Plan"),
+        "general_notes": project_details.get("general_notes", "General Notes:"),
+        "drawn_by": project_details.get("drawn_by", "LC"),
+        "project": project_details.get("project", "Project Project"), # Placeholder
+        "address": project_details.get("address", "Address Location"),
+        "drawing_title": project_details.get("drawing_title", "SITE MAP"),
+        "authorised_by": project_details.get("authorised_by", "Authorised By"),
+        "date": project_details.get("date", "24-02-2023"),
+        "client": project_details.get("client", "Client Name"),
+        "job_no": project_details.get("job_no", "#773")
+    }
 
     target_points_json = json.dumps(target_points)
     kmz_points_json = json.dumps([{"lat": p.y, "lon": p.x} for p in kmz_points] if kmz_points else [])
@@ -688,15 +705,81 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     display: none !important;
 }}
 /* Borewell ID Labels */
+/* Borewell ID Labels */
 .borewell-label {{
-    background: rgba(255, 255, 255, 0.95) !important;
-    border: 2px solid #FF6B35 !important;
-    border-radius: 4px !important;
-    padding: 2px 6px !important;
+    background: #FFFFFF !important;
+    border: 1px solid #000000 !important;
+    border-radius: 0px !important;
+    padding: 1px 4px !important;
     font-weight: bold !important;
-    font-size: 12px !important;
-    color: #333 !important;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+    font-family: Arial, sans-serif !important;
+    font-size: 11px !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+}}
+</style>
+
+<style>
+/* Footer Strip Styles */
+#snapshot-footer {{
+    display: none; /* Hidden by default, shown during snapshot composite */
+    width: 100%;
+    background: white;
+    border-top: 2px solid #333;
+    font-family: Arial, sans-serif;
+    color: #333;
+    box-sizing: border-box;
+    padding: 0;
+    margin: 0;
+}}
+
+.footer-container {{
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}}
+
+.footer-top {{
+    padding: 5px 10px;
+    border-bottom: 2px solid #333;
+    font-weight: bold;
+    font-size: 14px;
+}}
+
+.footer-main {{
+    display: flex;
+    width: 100%;
+    height: 120px; /* Fixed height for consistency */
+}}
+
+.footer-notes {{
+    flex: 1;
+    padding: 10px;
+    border-right: 2px solid #333;
+    font-size: 12px;
+}}
+
+.footer-details {{
+    flex: 1;
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    grid-gap: 4px;
+    padding: 10px;
+    font-size: 11px;
+    align-content: start;
+}}
+
+.footer-label {{
+    font-weight: bold;
+    text-align: right;
+    padding-right: 5px;
+}}
+
+.footer-value {{
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }}
 </style>
 
@@ -800,6 +883,65 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     <div style="font-size:16px; color:red; font-weight:bold; margin-right:8px; line-height:10px;">&rarr;</div>
     <span>Flow Direction</span>
   </div>
+</div>
+
+<!-- Hidden Footer Template -->
+<div id="snapshot-footer">
+    <div class="footer-container">
+        <div class="footer-top">
+             <span id="footer-attachment-title">{pd_safe['attachment_title']}</span>
+        </div>
+        <div class="footer-main">
+            <div class="footer-notes">
+                <strong>{pd_safe['general_notes']}</strong><br>
+                <br>
+                <!-- Space for notes -->
+            </div>
+            
+            <!-- Logo Section substitute -->
+            <div style="width: 150px; border-right: 2px solid #333; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+                <div style="font-size: 24px; font-weight: bold; color: #4DA6FF;">ee</div>
+                <div style="font-size: 10px; color: #4DA6FF;">edwards<br>environmental</div>
+            </div>
+
+            <div class="footer-details">
+                <!-- Client Info -->
+                <div class="footer-label">Client:</div>
+                <div class="footer-value">{pd_safe['client']}</div>
+
+                 <div class="footer-label">Project:</div>
+                <div class="footer-value">{pd_safe['project']}</div>
+                
+                <div class="footer-label">Location:</div>
+                <div class="footer-value">{pd_safe['address']}</div>
+                
+            </div>
+            
+            <div class="footer-details" style="border-left: 1px solid #ccc;">
+                 <div class="footer-label">Drawing Title:</div>
+                <div class="footer-value"><strong>{pd_safe['drawing_title']}</strong></div>
+
+                <div class="footer-label">Drawn:</div>
+                <div class="footer-value">{pd_safe['drawn_by']}</div>
+                
+                <div class="footer-label">Project No:</div>
+                <div class="footer-value">{pd_safe['job_no']}</div>
+                
+                 <div class="footer-label">Date:</div>
+                <div class="footer-value">{pd_safe['date']}</div>
+                
+                <div class="footer-label">Figure No:</div>
+                <div class="footer-value">1 Rev. A</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Optional: Input for Attachment Title in Controls -->
+<div id="footer-controls" style="position: absolute; top: 350px; right: 10px; z-index: 9999; background: rgba(255,255,255,0.9); padding: 5px; border-radius: 4px; font-size: 11px; width: 200px;">
+    <strong>Footer Settings</strong><br>
+    <label>Figure Title:</label>
+    <input type="text" id="input-attachment-title" value="{pd_safe['attachment_title']}" style="width: 100%; margin-top:2px;" oninput="document.getElementById('footer-attachment-title').innerText = this.value">
 </div>
 
 <!-- Debug Status -->
@@ -1102,22 +1244,25 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
   
   // --- Snapshot Logic ---
   // --- Snapshot Logic ---
+  // --- Snapshot Logic ---
+  // --- Snapshot Logic ---
   window.takeSnapshot = function() {{
       const m = findMap();
       if (!m) return;
       
       const btn = document.getElementById('btn-snapshot');
       const leafletControls = document.querySelector('.leaflet-control-container');
-      // Select controls robustly - filter by class or just all high z-index divs that ARE NOT legend/compass
-      // But re-querying relies on style string which changes. Better to query once.
       const customControls = Array.from(document.querySelectorAll('div[style*="z-index:9999"]'));
+      const footerStrip = document.getElementById('snapshot-footer');
+      const hiddenControls = document.getElementById('footer-controls'); // Hide this input box
       
       // Helper: Restore UI
       const restoreUI = () => {{
           if (leafletControls) leafletControls.style.display = 'block';
           
           customControls.forEach(ctrl => {{
-              ctrl.style.display = 'block';
+              if (ctrl.id !== 'footer-controls') ctrl.style.display = 'block'; 
+              else ctrl.style.display = 'block';
           }});
           
           if (btn) {{
@@ -1125,14 +1270,18 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
             btn.innerText = '📸 Snapshot';
             btn.style.opacity = '1';
           }}
+          
+          // Clean up composition container
+          const comp = document.getElementById('composition-container');
+          if (comp) comp.remove();
       }};
 
-      // Safety Timeout: Force UI restore if snapshot hangs for more than 15 seconds
+      // Safety Timeout
       const safetyTimeout = setTimeout(() => {{
           console.warn('Snapshot process timed out (Safety Trigger)');
           alert('Snapshot timed out. Please try again.');
           restoreUI();
-      }}, 15000);
+      }}, 20000);
       
       if (btn) {{
         btn.disabled = true;
@@ -1149,6 +1298,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
               ctrl.style.display = 'none';
           }}
       }});
+      if (hiddenControls) hiddenControls.style.display = 'none';
       
       const mapContainer = m.getContainer();
 
@@ -1161,70 +1311,88 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
            height: mapContainer.offsetHeight,
            useCORS: true,
            backgroundColor: '#ffffff',
-           cacheBust: false, // DISABLED: Breaks Data URIs
-           pixelRatio: isMobile ? 3 : 4, // High Resolution for all
+           cacheBust: false,
+           pixelRatio: isMobile ? 3 : 4,
            filter: (node) => {{
                if (node.tagName === 'IMG') return true; 
                return true;
            }}
        }};
 
-      // SIMPLIFIED LOGIC:
-      // 1. Force Map Invalidation (Layout Refresh)
+      // Force Map Layout Refresh
       if (m && typeof m.invalidateSize === 'function') {{
           m.invalidateSize();
       }}
 
-      // 2. Inject Hidden Clone (Heat up the image)
-      const ov = findOverlay();
-      if (ov) {{
-         let src = (typeof ov.getElement === 'function' ? ov.getElement().src : ov._image.src);
-         if (src) {{
-             let hiddenImg = document.createElement('img');
-             hiddenImg.src = src;
-             hiddenImg.style.position = 'absolute';
-             hiddenImg.style.top = '-9999px';
-             hiddenImg.style.opacity = '0.01';
-             document.body.appendChild(hiddenImg);
-             // Cleanup after a while
-             setTimeout(() => {{ if(hiddenImg) hiddenImg.remove(); }}, 10000); 
-         }}
-      }}
+      console.log('Starting Composite Snapshot...');
 
-      console.log('Starting simplified double-flash snapshot...');
-
-      // 3. FLASH 1: Warm-up Snapshot (Dummy run to prime the canvas)
+      // PHASE 1: Capture Map Only
       setTimeout(() => {{
-          console.log('Flash 1: Warm-up...');
           htmlToImage.toPng(mapContainer, options)
-             .then(() => {{
-                 console.log('Flash 1 complete. Waiting for final render...');
+             .then((mapDataUrl) => {{
+                 console.log('Map Captured. Composing with Footer...');
+                 
+                 // PHASE 2: Composition
+                 // Create a container that exactly matches the map width
+                 const container = document.createElement('div');
+                 container.id = 'composition-container';
+                 container.style.position = 'absolute';
+                 container.style.top = '0';
+                 container.style.left = '0';
+                 container.style.zIndex = '99999';
+                 container.style.background = 'white';
+                 container.style.width = mapContainer.offsetWidth + 'px';
+                 
+                 // 1. Map Image
+                 const mapImg = document.createElement('img');
+                 mapImg.src = mapDataUrl;
+                 mapImg.style.width = '100%';
+                 mapImg.style.display = 'block';
+                 container.appendChild(mapImg);
+                 
+                 // 2. Footer clone
+                 const footerClone = footerStrip.cloneNode(true);
+                 footerClone.style.display = 'block'; // Make visible
+                 footerClone.id = 'footer-clone';
+                 container.appendChild(footerClone);
+                 
+                 document.body.appendChild(container);
+                 
+                 // Wait a moment for the DOM to settle with the new image
+                 setTimeout(() => {{
+                     // Capture the Composite
+                     htmlToImage.toPng(container, {{
+                         width: container.offsetWidth,
+                         // Height is auto
+                         useCORS: true,
+                         pixelRatio: options.pixelRatio
+                     }})
+                     .then((finalDataUrl) => {{
+                          const link = document.createElement('a');
+                          link.download = 'map_snapshot_with_footer.png';
+                          link.href = finalDataUrl;
+                          link.click();
+                          
+                          clearTimeout(safetyTimeout);
+                          restoreUI();
+                     }})
+                     .catch((err) => {{
+                         console.error('Composite Snapshot failed:', err);
+                         alert('Composite Snapshot failed.');
+                         clearTimeout(safetyTimeout);
+                         restoreUI();
+                     }});
+                 }}, 500);
+                 
              }})
-             .catch(err => console.warn('Flash 1 failed (ignoring):', err));
-
-          // 4. FLASH 2: Real Snapshot (After 3000ms total)
-          setTimeout(() => {{
-              console.log('Flash 2: Taking final snapshot...');
-              htmlToImage.toPng(mapContainer, options)
-              .then(function (dataUrl) {{
-                  const link = document.createElement('a');
-                  link.download = 'map_snapshot.png';
-                  link.href = dataUrl;
-                  link.click();
-                  
-                  clearTimeout(safetyTimeout);
-                  restoreUI();
-              }})
-              .catch(function (error) {{
-                  console.error('Snapshot failed:', error);
-                  alert('Snapshot failed.');
-                  // Always restore UI
-                  clearTimeout(safetyTimeout);
-                  restoreUI();
-              }});
-          }}, 3000);
+             .catch((err) => {{
+                 console.error('Map Snapshot failed:', err);
+                 alert('Snapshot failed.');
+                 clearTimeout(safetyTimeout);
+                 restoreUI();
+             }});
           
-      }}, 500); // Start warm-up quickly (500ms)
+      }}, 500); 
   }};
 
   // --- Interactive Dots Logic ---
