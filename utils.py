@@ -383,11 +383,17 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     z_min, z_max = df[target_col].min(), df[target_col].max()
     z_range = z_max - z_min
     
-    # Avoid zero range
-    if z_range == 0: z_range = 1
+    # Dynamic Interval Logic (Restored from Backup)
+    interval = 1.0 if z_range > 10 else 0.5 if z_range > 5 else 0.2 if z_range > 2 else 0.1 if z_range > 1 else 0.05 if z_range > 0.5 else 0.01
     
-    levels = np.linspace(z_min, z_max, 20)
-    
+    # Ensure range isn't zero
+    if z_range == 0:
+        levels = np.linspace(z_min, z_max, 20)
+    else:
+        start = np.floor(z_min / interval) * interval
+        end = np.ceil(z_max / interval) * interval + interval
+        levels = np.arange(start, end, interval)
+
     # Plot
     fig, ax = plt.subplots(figsize=(10, 10))
     # Filled contours (Visuals) - Always show colored gradient
@@ -395,24 +401,31 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     
     # Contour lines and Arrows - Only for groundwater/elevation
     if generate_contours:
-        # Contour lines (Structure)
-        contour_lines = ax.contour(grid_x, grid_y, grid_z, levels=levels, colors='black', linewidths=0.5, alpha=0.5)
+        # Contour lines (Structure) - Made darker and slightly thicker for visibility
+        contour_lines = ax.contour(grid_x, grid_y, grid_z, levels=levels, colors='black', linewidths=0.8, alpha=0.8)
         
         # Quiver for flow direction (Arrows at points)
         dz_dx, dz_dy = np.gradient(grid_z)
-        # Flip gradient for flow (high to low)
-        u = -dz_dx
-        v = -dz_dy
+        
+        # Normalize vectors for consistent arrow size (Restored)
+        magnitude = np.sqrt(dz_dx**2 + dz_dy**2)
+        # Avoid division by zero
+        u = -dz_dx / (magnitude + 1e-10)
+        v = -dz_dy / (magnitude + 1e-10)
         
         # Plot Arrows (Quiver)
-        step = 10 # Sampling frequency
-        ax.quiver(grid_x[::step, ::step], grid_y[::step, ::step], u[::step, ::step], v[::step, ::step], color='red', scale=25, width=0.002)
+        # HD Settings: Higher density (lower step), optimized width/scale for 300 DPI
+        step = 10 
+        # width scale interacts with figsize and dpi. 0.002 is relative to plot width.
+        ax.quiver(grid_x[::step, ::step], grid_y[::step, ::step], u[::step, ::step], v[::step, ::step], 
+                  color='red', scale=25, width=0.0025, headwidth=3, headlength=4, alpha=0.9)
 
     ax.axis('off')
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
     
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', transparent=True, bbox_inches='tight', pad_inches=0)
+    # High DPI for HD output (prevents pixelation)
+    plt.savefig(buf, format='png', transparent=True, bbox_inches='tight', pad_inches=0, dpi=300)
     plt.close()
     buf.seek(0)
     image_base64 = base64.b64encode(buf.read()).decode('utf-8')
