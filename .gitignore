@@ -41,3 +41,21 @@ Thumbs.db
 # Vercel
 .vercel
 .streamlit/secrets.toml
+
+# Scripts and Tools to Ignore
+reproduce_issue.py
+validate_legend.py
+inspect_*.py
+fix_*.py
+update_*.py
+analyze_*.py
+explore_*.py
+experiment_*.py
+find_*.py
+borewell_*.py
+examine_*.py
+map_*.html
+
+# Debug Output
+*_output.md
+utils.py.bak
