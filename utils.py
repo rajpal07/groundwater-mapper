@@ -106,10 +106,19 @@ def get_australian_utm_zones():
     }
 
 
+
+# Try to import global-land-mask for robust detection
+try:
+    from global_land_mask import globe
+    HAS_LAND_MASK = True
+except ImportError:
+    HAS_LAND_MASK = False
+    print("Warning: global-land-mask not installed. Land/Water check disabled.")
+
 def auto_detect_utm_zone(df, reference_points=None):
     """
     Auto-detect the correct UTM zone for Australian coordinates.
-    Uses mathematical calculation instead of trial-and-error.
+    Uses mathematical calculation and Land/Water check.
     
     Args:
         df: DataFrame with 'Easting' and 'Northing' columns
@@ -129,7 +138,6 @@ def auto_detect_utm_zone(df, reference_points=None):
     zones_to_test = []
     
     # Strategy 0: Use Reference Points (Ground Truth)
-    # If we have KMZ points, we KNOW where the project is.
     if reference_points:
         try:
             # Calculate centroid of reference points
@@ -137,13 +145,11 @@ def auto_detect_utm_zone(df, reference_points=None):
                  ref_lons = [p['lon'] for p in reference_points]
                  ref_lats = [p['lat'] for p in reference_points]
             else:
-                 # Assume objects with x/y or lon/lat attributes (like shapely points or custom objs)
-                 # Handle shapely points (x=lon, y=lat)
+                 # Assume objects with x/y or lon/lat attributes
                  if hasattr(reference_points[0], 'x'):
                      ref_lons = [p.x for p in reference_points]
                      ref_lats = [p.y for p in reference_points]
                  else:
-                     # Fallback
                      ref_lons = []
                      ref_lats = []
             
@@ -153,29 +159,26 @@ def auto_detect_utm_zone(df, reference_points=None):
                 
                 expected_zone = calculate_utm_zone_from_lonlat(avg_ref_lon, avg_ref_lat)
                 print(f"📌 KMZ Reference Hint: Lon {avg_ref_lon:.4f}°, Lat {avg_ref_lat:.4f}° -> Zone {expected_zone}S")
-                
-                # Test THIS zone first!
                 zones_to_test.append(expected_zone)
         except Exception as e:
             print(f"Warning: Could not use reference points for zone hint: {e}")
 
     # Strategy 1: Estimate zone from Easting value
-    # Appending other logical candidates
     if 200000 <= avg_easting <= 800000:
-        # Standard common zones
-        candidates = [54, 55, 56, 53, 52, 51, 50, 49]
+        candidates = [55, 54, 56, 53, 52, 51, 50, 49] # Prioritize 55/54 for Victoria
     else:
-        # All zones
         candidates = list(australian_zones.keys())
     
-    # Add candidates to test list (preserving order, avoid duplicates)
+    # Add candidates to test list (preserving order)
     for c in candidates:
         if c not in zones_to_test:
             zones_to_test.append(c)
             
-    # Strategy 2: Transform using each candidate zone and check validity
+    # Strategy 2: Transform and Check (Validity + Land Mask)
     best_match = None
-    best_confidence = "low"
+    best_confidence = "low" # low, medium, high, very_high (land)
+    
+    print(f"DEBUG: Testing Zones: {zones_to_test}")
     
     for zone_num in zones_to_test:
         if zone_num not in australian_zones: continue 
@@ -188,90 +191,76 @@ def auto_detect_utm_zone(df, reference_points=None):
             transformer = Transformer.from_crs(epsg_code, "EPSG:4326", always_xy=True)
             test_lon, test_lat = transformer.transform(avg_easting, avg_northing)
             
-            # Check if coordinates are in Australia
-            if not (112 <= test_lon <= 160 and -45 <= test_lat <= -10):
+            # 1. Geographic Bounds Check (Is it in/near Australia?)
+            if not (112 <= test_lon <= 155 and -45 <= test_lat <= -10):
                 continue
             
-            # Calculate what zone this longitude should be in
             calculated_zone = calculate_utm_zone_from_lonlat(test_lon, test_lat)
+            is_zone_match = (calculated_zone == zone_num)
             
-            # Check if the calculated zone matches the zone we're testing
-            if calculated_zone == zone_num:
-                # Perfect match!
+            # 2. Land Check (The "Robust" Check)
+            is_on_land = False
+            if HAS_LAND_MASK:
+                try:
+                    is_on_land = globe.is_land(test_lat, test_lon)
+                except:
+                    pass # Globe might fail on edge cases
+            
+            # Scoring Logic
+            current_confidence = "low"
+            if is_on_land:
+                current_confidence = "very_high"
+            elif is_zone_match:
+                current_confidence = "high"
+            elif abs(calculated_zone - zone_num) <= 1:
+                current_confidence = "medium"
+            
+            print(f"  Testing Zone {zone_num}S: Lon {test_lon:.2f}, Lat {test_lat:.2f} | Match? {is_zone_match} | Land? {is_on_land} -> {current_confidence.upper()}")
+            
+            # Acceptance Logic:
+            # If we find "very_high" (Land), we take it immediately (unless we had a specific reference hint earlier?)
+            # Actually, reference hint is reliable. Land is next most reliable.
+            
+            if current_confidence == "very_high":
                 best_match = {
-                    'epsg': epsg_code,
-                    'zone': zone_num,
-                    'lon': test_lon,
-                    'lat': test_lat,
-                    'description': zone_data['description']
+                    'epsg': epsg_code, 'zone': zone_num, 'lon': test_lon, 'lat': test_lat, 'description': zone_data['description']
                 }
-                best_confidence = "high"
-                print(f"✓ Auto-detected UTM Zone {zone_num}S ({epsg_code}) - {zone_data['description']}")
-                print(f"  Coordinates: Lon {test_lon:.4f}°, Lat {test_lat:.4f}°")
-                print(f"  Confidence: HIGH")
+                best_confidence = "very_high"
+                break # Found land! Stop searching.
                 
-                # If this matches our reference hint, STOP IMMEDIATELY - We found it!
-                if reference_points and zones_to_test[0] == zone_num:
-                     print("  (Confirmed by KMZ Reference)")
-                     break
-                
-                # Otherwise, continue checking just in case (unless we trust this 100%)
-                # Actually, if we hit a valid HIGH confidence match, we should probably take it
-                # But wait - in the ambiguity case, Zone 54 IS a valid high confidence match mathematically!
-                # So we rely on the ORDER of 'zones_to_test' to prioritize the KMZ hint.
-                break
-            
-            # Check if we're near a zone boundary (within 1 zone)
-            elif abs(calculated_zone - zone_num) == 1:
-                # Near boundary - this could still be valid
-                if best_match is None or best_confidence == "low":
+            if current_confidence == "high":
+                # High (Math match) but maybe water? Keep looking for Land, but store this as backup.
+                if best_confidence not in ["very_high", "high"]: # Don't downgrade
                     best_match = {
-                        'epsg': epsg_code,
-                        'zone': zone_num,
-                        'lon': test_lon,
-                        'lat': test_lat,
-                        'description': zone_data['description']
+                         'epsg': epsg_code, 'zone': zone_num, 'lon': test_lon, 'lat': test_lat, 'description': zone_data['description']
+                    }
+                    best_confidence = "high"
+            
+            elif current_confidence == "medium":
+                 if best_confidence == "low":
+                    best_match = {
+                         'epsg': epsg_code, 'zone': zone_num, 'lon': test_lon, 'lat': test_lat, 'description': zone_data['description']
                     }
                     best_confidence = "medium"
             
-            # If no perfect match yet, keep the first valid Australian coordinate
-            elif best_match is None:
-                best_match = {
-                    'epsg': epsg_code,
-                    'zone': zone_num,
-                    'lon': test_lon,
-                    'lat': test_lat,
-                    'description': zone_data['description']
-                }
-                best_confidence = "low"
+            elif best_confidence == "low" and best_match is None:
+                 best_match = {
+                        'epsg': epsg_code, 'zone': zone_num, 'lon': test_lon, 'lat': test_lat, 'description': zone_data['description']
+                   }
                 
         except Exception as e:
-            # Transformation failed for this zone
             print(f"Error testing zone {zone_num}: {e}")
             continue
     
-    # Strategy 3: Fallback if no match found
+    # Fallback
     if best_match is None:
-        print("⚠ Warning: Could not auto-detect UTM zone reliably")
-        print(f"  Using default Zone 54S (EPSG:32754) - most common for Victoria/NSW")
-        best_match = {
-            'epsg': 'EPSG:32754',
-            'zone': 54,
-            'lon': None,
-            'lat': None,
-            'description': 'Default fallback'
-        }
+        print("⚠ Warning: Could not auto-detect UTM zone. Defaulting to 55S.")
+        best_match = {'epsg': 'EPSG:32755', 'zone': 55, 'lon': None, 'lat': None, 'description': 'Default'}
         best_confidence = "low"
-    elif best_confidence == "medium":
-        print(f"⚠ Auto-detected UTM Zone {best_match['zone']}S ({best_match['epsg']}) - {best_match['description']}")
-        print(f"  Coordinates: Lon {best_match['lon']:.4f}°, Lat {best_match['lat']:.4f}°")
-        print(f"  Confidence: MEDIUM (near zone boundary)")
-    elif best_confidence == "low":
-        print(f"⚠ Auto-detected UTM Zone {best_match['zone']}S ({best_match['epsg']}) - {best_match['description']}")
-        print(f"  Coordinates: Lon {best_match['lon']:.4f}°, Lat {best_match['lat']:.4f}°")
-        print(f"  Confidence: LOW (unusual coordinates)")
-    
+
+    print(f"✓ Selected Zone {best_match['zone']}S ({best_match['epsg']}) with {best_confidence} confidence.")
     return best_match['epsg'], best_confidence, best_match
+
 
 
 def process_excel_data(file, interpolation_method='linear', reference_points=None, value_column='Groundwater Elevation mAHD', generate_contours=True, colormap='viridis'):
