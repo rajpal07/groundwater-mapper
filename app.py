@@ -139,15 +139,27 @@ if st.session_state['processed_data'] is not None:
                 )
                 
                 # Save & Inject
-                m.save(OUTPUT_MAP_PATH)
-                utils.inject_controls_to_html(OUTPUT_MAP_PATH, image_bounds, target_points, kmz_points, legend_label=selected_param)
+                # Use a unique filename to prevent caching issues
+                unique_id = str(uuid.uuid4())[:8]
+                OUTPUT_MAP_PATH_UNIQUE = f"generated_map_{unique_id}.html"
+                
+                m.save(OUTPUT_MAP_PATH_UNIQUE)
+                utils.inject_controls_to_html(OUTPUT_MAP_PATH_UNIQUE, image_bounds, target_points, kmz_points, legend_label=selected_param)
                 
                 # Render
-                with open(OUTPUT_MAP_PATH, 'r', encoding='utf-8') as f:
+                with open(OUTPUT_MAP_PATH_UNIQUE, 'r', encoding='utf-8') as f:
                     map_html = f.read()
                     
-                st.download_button("📥 Download Map", map_html, "groundwater_map.html", "text/html")
-                st.components.v1.html(map_html, height=800, scrolling=True)
+                st.download_button("📥 Download Map", map_html, f"groundwater_map_{selected_param}.html", "text/html")
+                
+                # Force iframe refresh by using a unique key
+                st.components.v1.html(map_html, height=800, scrolling=True, key=f"map_display_{unique_id}")
+                
+                # Clean up (Optional, but good practice to avoid clutter)
+                # try:
+                #    os.remove(OUTPUT_MAP_PATH_UNIQUE)
+                # except:
+                #    pass
                 
             except Exception as e:
                 st.error(f"Map Generation Error: {e}")
