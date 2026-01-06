@@ -778,7 +778,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
   <!-- Points -->
   <div style="display:flex; align-items:center; margin-bottom:10px;">
     <div style="width:12px; height:12px; background:#FF6B35; border-radius:50%; border:2px solid white; margin-right:8px;"></div>
-    <span>Borewell Points</span>
+    <span>Monitoring Bore</span>
   </div>
 
   <!-- Contour Guide -->
