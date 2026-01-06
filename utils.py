@@ -371,13 +371,24 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     # Folium expects [[lat_min, lon_min], [lat_max, lon_max]]
     image_bounds = [[min_lat, min_lon], [max_lat, max_lon]]
 
-    # Interpolation
-    grid_z = griddata(
-        points=(df[x_col], df[y_col]),
-        values=df[target_col],
-        xi=(grid_x, grid_y),
-        method=interpolation_method
-    )
+    # Interpolation (Switch to RBF for extrapolation/filling gaps)
+    # griddata defaults to 'linear' and leaves NaNs outside convex hull.
+    # Rbf (Radial Basis Function) smoothly extrapolates to fill the grid.
+    from scipy.interpolate import Rbf
+    
+    # Add a small amount of noise to coordinates to prevent singular matrix if points are duplicate/collinear
+    # (Optional but robust)
+    
+    try:
+        rbf = Rbf(df[x_col], df[y_col], df[target_col], function='linear')
+        grid_z = rbf(grid_x, grid_y)
+    except Exception as e:
+        print(f"RBF Interpolation failed: {e}. Fallback to linear with nearest fill.")
+        # Fallback: Linear then Nearest to fill NaNs
+        grid_z = griddata((df[x_col], df[y_col]), df[target_col], (grid_x, grid_y), method='linear')
+        mask = np.isnan(grid_z)
+        if mask.any():
+            grid_z[mask] = griddata((df[x_col], df[y_col]), df[target_col], (grid_x[mask], grid_y[mask]), method='nearest')
 
     # Generate Contour Image
     z_min, z_max = df[target_col].min(), df[target_col].max()
