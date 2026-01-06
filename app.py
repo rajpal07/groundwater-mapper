@@ -152,8 +152,11 @@ if st.session_state['processed_data'] is not None:
                     
                 st.download_button("📥 Download Map", map_html, f"groundwater_map_{selected_param}.html", "text/html")
                 
-                # Force iframe refresh by using a unique key
-                st.components.v1.html(map_html, height=800, scrolling=True, key=f"map_display_{unique_id}")
+                # Append unique ID to HTML to satisfy Streamlit's diffing (Forces refresh as content changed)
+                map_html_with_id = map_html + f"\n<!-- Job ID: {unique_id} -->"
+                
+                # Render (removed key arg which caused error)
+                st.components.v1.html(map_html_with_id, height=800, scrolling=True)
                 
                 # Clean up (Optional, but good practice to avoid clutter)
                 # try:
