@@ -104,6 +104,18 @@ if st.session_state['processed_data'] is not None:
         
     selected_param = st.selectbox("Select Parameter to Visualize", available_cols, index=default_idx)
     
+    # Dynamic Colormap Selector
+    colormap_options = ['viridis', 'plasma', 'inferno', 'magma', 'cividis', 'RdYlBu_r', 'Spectral_r', 'coolwarm']
+    
+    # Smart default: Use 'RdYlBu_r' (Red=High) for pH/Chemicals if selected, else 'viridis' seems fine.
+    # Actually, user complained about opacity/darkness. 'plasma' or 'inferno' are very bright.
+    # 'RdYlBu_r' is good for divergence. 
+    default_cmap_idx = 0
+    if "pH" in selected_param or "Salinity" in selected_param or "TDS" in selected_param:
+         if 'RdYlBu_r' in colormap_options: default_cmap_idx = colormap_options.index('RdYlBu_r')
+         
+    selected_cmap = st.selectbox("Color Scheme", colormap_options, index=default_cmap_idx)
+    
     if st.button("Generate Map", type="primary"):
         with st.spinner(f"Generating map for {selected_param}..."):
             try:
@@ -125,7 +137,8 @@ if st.session_state['processed_data'] is not None:
                     df, 
                     reference_points=kmz_points,
                     value_column=selected_param,
-                    generate_contours=should_generate_contours
+                    generate_contours=should_generate_contours,
+                    colormap=selected_cmap
                 )
                 
                 # 3. Create Map
@@ -144,7 +157,7 @@ if st.session_state['processed_data'] is not None:
                 OUTPUT_MAP_PATH_UNIQUE = f"generated_map_{unique_id}.html"
                 
                 m.save(OUTPUT_MAP_PATH_UNIQUE)
-                utils.inject_controls_to_html(OUTPUT_MAP_PATH_UNIQUE, image_bounds, target_points, kmz_points, legend_label=selected_param)
+                utils.inject_controls_to_html(OUTPUT_MAP_PATH_UNIQUE, image_bounds, target_points, kmz_points, legend_label=selected_param, colormap=selected_cmap)
                 
                 # Render
                 with open(OUTPUT_MAP_PATH_UNIQUE, 'r', encoding='utf-8') as f:

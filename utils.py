@@ -274,7 +274,7 @@ def auto_detect_utm_zone(df, reference_points=None):
     return best_match['epsg'], best_confidence, best_match
 
 
-def process_excel_data(file, interpolation_method='linear', reference_points=None, value_column='Groundwater Elevation mAHD', generate_contours=True):
+def process_excel_data(file, interpolation_method='linear', reference_points=None, value_column='Groundwater Elevation mAHD', generate_contours=True, colormap='viridis'):
     """
     Reads Excel file (or DataFrame), interpolates data, and generates a contour image.
     
@@ -408,7 +408,8 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     # Plot
     fig, ax = plt.subplots(figsize=(10, 10))
     # Filled contours (Visuals) - Always show colored gradient
-    contour_filled = ax.contourf(grid_x, grid_y, grid_z, levels=levels, cmap='viridis', alpha=0.6)
+    # colormap is passed via argument (default 'viridis')
+    contour_filled = ax.contourf(grid_x, grid_y, grid_z, levels=levels, cmap=colormap, alpha=0.6)
     
     # Contour lines and Arrows - Only for groundwater/elevation
     if generate_contours:
@@ -582,7 +583,61 @@ def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_
     return m
 
 
-def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=None, legend_label="Elevation"):
+def get_colormap_info(cmap_name):
+    """
+    Returns hex codes and descriptive labels for a given colormap.
+    Returns: (low_hex, mid_hex, high_hex, high_label_desc, low_label_desc)
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.colors as mcolors
+    
+    try:
+        cmap = plt.get_cmap(cmap_name)
+    except:
+        cmap = plt.get_cmap('viridis')
+        
+    # Get colors at 0.0 (Low), 0.5 (Mid), 1.0 (High)
+    low_rgb = cmap(0.0)[:3]
+    mid_rgb = cmap(0.5)[:3]
+    high_rgb = cmap(1.0)[:3]
+    
+    low_hex = mcolors.to_hex(low_rgb)
+    mid_hex = mcolors.to_hex(mid_rgb)
+    high_hex = mcolors.to_hex(high_rgb)
+    
+    # Heuristic labels for common maps users might pick
+    # This helps the "High (Yellow)" text be accurate
+    labels = {
+        'viridis': ('Yellow', 'Purple'),
+        'plasma': ('Yellow', 'Blue'),
+        'inferno': ('Yellow', 'Black'),
+        'magma': ('Light Pink', 'Black'),
+        'cividis': ('Yellow', 'Blue'),
+        'RdYlBu': ('Blue', 'Red'), # Note: Matplotlib RdYlBu has Red at 0 (low) and Blue at 1 (high)? No, Red is Low index? Wait.
+                                     # RdYlBu: Red (0) -> Yellow -> Blue (1). IF used as is.
+                                     # Often used as '_r' for Red=High.
+        'RdYlBu_r': ('Red', 'Blue'), # Red (1) -> Blue (0)
+        'Spectral': ('Red', 'Purple'), # 0=Red, 1=Purple/Blue? Spectral is Red->Yellow->Blue/Purple
+        'Spectral_r': ('Red', 'Blue'), 
+        'coolwarm': ('Red', 'Blue'),
+        'bwr': ('Red', 'Blue'),
+        'seismic': ('Red', 'Blue')
+    }
+    
+    # Generic fallback
+    high_desc, low_desc = labels.get(cmap_name, ('High Color', 'Low Color'))
+    
+    # Adjust for inverted maps automatically-ish if possible, otherwise rely on manual list
+    if cmap_name.endswith('_r') and cmap_name not in labels:
+         # simple swap approximation
+         base = cmap_name[:-2]
+         if base in labels:
+             low_desc, high_desc = labels[base]
+             
+    return low_hex, mid_hex, high_hex, high_desc, low_desc
+    
+
+def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=None, legend_label="Elevation", colormap="viridis"):
     """
     Injects JavaScript into HTML. Now supports dynamic legend label.
     """
@@ -593,6 +648,9 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         # "Groundwater Elevation mAHD" -> "GW Elev..."
         if "Elevation" in legend_label: legend_label_short = "Elevation"
         else: legend_label_short = legend_label.split(' ')[0]
+
+    # Get dynamic colors for legend
+    low_hex, mid_hex, high_hex, high_desc, low_desc = get_colormap_info(colormap)
 
     with open(html_file, "r", encoding="utf-8") as f:
         html = f.read()
@@ -725,14 +783,19 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
 
   <!-- Contour Guide -->
   <div style="font-weight:bold; margin-bottom:6px; margin-top:8px; border-top:1px solid #ddd; padding-top:6px;">How to Read Contour</div>
+  
+  <!-- High Gradient -->
   <div style="display:flex; align-items:center; margin-bottom:4px;">
-    <div style="width:20px; height:10px; background:linear-gradient(to right, #fde725, #5ec962); margin-right:8px; border:1px solid #999;"></div>
-    <span>High {legend_label_short} (Yellow)</span>
+    <div style="width:20px; height:10px; background:linear-gradient(to right, {mid_hex}, {high_hex}); margin-right:8px; border:1px solid #999;"></div>
+    <span>High {{legend_label_short}} ({high_desc})</span>
   </div>
+  
+  <!-- Low Gradient -->
   <div style="display:flex; align-items:center; margin-bottom:4px;">
-    <div style="width:20px; height:10px; background:linear-gradient(to right, #3b528b, #440154); margin-right:8px; border:1px solid #999;"></div>
-    <span>Low {legend_label_short} (Purple)</span>
+    <div style="width:20px; height:10px; background:linear-gradient(to right, {low_hex}, {mid_hex}); margin-right:8px; border:1px solid #999;"></div>
+    <span>Low {{legend_label_short}} ({low_desc})</span>
   </div>
+  
   <div style="display:flex; align-items:center;">
     <div style="font-size:16px; color:red; font-weight:bold; margin-right:8px; line-height:10px;">&rarr;</div>
     <span>Flow Direction</span>
