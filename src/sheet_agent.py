@@ -372,7 +372,7 @@ class SheetAgent:
         print("Data cleaning complete.")
         return df
 
-    def process(self, file_path):
+    def process(self, file_path, output_path=None):
         """
         Main execution method.
         """
@@ -385,14 +385,21 @@ class SheetAgent:
             file_bytes = f.read()
             file_hash = hashlib.md5(file_bytes).hexdigest()
             
+        # Use a central cache dir or job specific? 
+        # For now, let's keep cache alongside or global. 
+        # Global cache is actually good for LlamaParse (saves $$).
         cache_file = f"cache_llama_{file_hash}.md"
         
         if not os.path.exists(cache_file):
             print("Parsing file (this may take a moment)...")
-            markdown_output = self.parse_raw_file(file_path)
-            # Save for debugging/caching
-            with open(cache_file, "w", encoding="utf-8") as f:
-                f.write(markdown_output)
+            try:
+                markdown_output = self.parse_raw_file(file_path)
+                # Save for debugging/caching
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    f.write(markdown_output)
+            except Exception as e:
+                print(f"Parsing failed: {e}")
+                return None
         else:
              print(f"Loading cached markdown ({cache_file})...")
              with open(cache_file, "r", encoding="utf-8") as f:
@@ -434,7 +441,13 @@ class SheetAgent:
         # 4. Clean & Save
         if not final_df.empty:
             cleaned_df = self.clean_data(final_df)
-            output_path = "processed_data.xlsx" # Hardcoded output path
+            
+            if output_path is None:
+                output_path = "processed_data.xlsx" # Fallback
+                
+            # Ensure dir exists
+            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+            
             cleaned_df.to_excel(output_path, index=False)
             print(f"Successfully saved processed data to: {output_path}")
             return output_path

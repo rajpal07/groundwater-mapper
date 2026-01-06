@@ -3,6 +3,7 @@ import utils
 import os
 import pandas as pd
 from src.sheet_agent import SheetAgent
+import uuid
 
 st.set_page_config(layout="wide", page_title="Groundwater Mapper")
 
@@ -19,6 +20,8 @@ if 'processed_data' not in st.session_state:
     st.session_state['processed_data'] = None
 if 'processed_source' not in st.session_state:
     st.session_state['processed_source'] = None
+if 'current_job_id' not in st.session_state:
+    st.session_state['current_job_id'] = None
 
 with st.sidebar:
     st.header("1. Data Upload")
@@ -37,22 +40,30 @@ with st.sidebar:
         if st.button("Process with AI Agent", type="primary"):
             with st.spinner("AI Agent is reading the Excel file..."):
                 try:
+                    # Generic unique Job ID
+                    job_id = str(uuid.uuid4())
+                    job_dir = os.path.join("runs", job_id)
+                    os.makedirs(job_dir, exist_ok=True)
+                    
                     # Save temp file for Agent
-                    with open("temp_upload.xlsx", "wb") as f:
+                    input_path = os.path.join(job_dir, "original.xlsx")
+                    with open(input_path, "wb") as f:
                         f.write(excel_file.getbuffer())
                     
                     # Run Agent
                     agent = SheetAgent(api_key=api_key)
                     # Use 'process' method which returns path to processed_data.xlsx
                     # Note: Agent saves to 'processed_data.xlsx' locally
-                    result_path = agent.process("temp_upload.xlsx")
+                    output_path = os.path.join(job_dir, "processed.xlsx")
+                    result_path = agent.process(input_path, output_path=output_path)
                     
                     if result_path and os.path.exists(result_path):
                         # Load into Session State
                         df = pd.read_excel(result_path)
                         st.session_state['processed_data'] = df
                         st.session_state['processed_source'] = excel_file.name
-                        st.success(f"Processed {len(df)} rows successfully!")
+                        st.session_state['current_job_id'] = job_id
+                        st.success(f"Processed {len(df)} rows successfully! (Job ID: {job_id})")
                     else:
                         st.error("Agent failed to extract data.")
                         

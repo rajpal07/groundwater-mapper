@@ -687,7 +687,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
 </div>
 
 <!-- Legend -->
-<div id="map-legend" style="position:absolute; bottom:10px; right:10px; z-index:9999; background:rgba(255,255,255,0.95); padding:10px; border-radius:6px; font-family:Arial,Helvetica,sans-serif; font-size:12px; box-shadow:0 0 5px rgba(0,0,0,0.2);">
+<div id="map-legend" style="position:absolute; bottom:10px; right:10px; z-index:9999; background:rgba(255,255,255,0.95); padding:10px; border-radius:6px; font-family:Arial,Helvetica,sans-serif; font-size:12px; box-shadow:0 0 5px rgba(0,0,0,0.2); cursor:move;">
   <div style="font-weight:bold; margin-bottom:8px; border-bottom:1px solid #ddd; padding-bottom:4px;">Legend</div>
   
   <!-- Points -->
@@ -1212,13 +1212,16 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     if (m) {{
         const container = m.getContainer();
         if (compass && container) container.appendChild(compass);
-        if (legend && container) container.appendChild(legend);
+        if (legend && container) {{
+            container.appendChild(legend);
+            makeDraggable(legend);
+        }}
         
         // Add dynamic scale control (like Google Maps)
         const scaleCtrl = L.control.scale({{
             position: 'bottomleft', // Initial, we move it later
             metric: true,
-            imperial: true,
+            imperial: false,
             maxWidth: 250
         }}).addTo(m);
         
