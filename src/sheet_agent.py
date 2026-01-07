@@ -82,15 +82,53 @@ class SheetAgent:
             # --- Extract Table ---
             print(f"Found Table Header at line {header_row_index}")
             
+            # Handle multi-row headers (common in Excel tables)
+            # Row 1: |Well ID|Sample Date|Time|Geographical Coordinates||pH|...
+            # Row 2: ||||Easting|Northing|||...
+            
             header_line = lines[header_row_index].strip()
             if header_line.startswith('|'): header_line = header_line[1:]
             if header_line.endswith('|'): header_line = header_line[:-1]
-            headers = [c.strip() for c in header_line.split('|')]
-            headers = [h for h in headers if h] 
+            headers_row1 = [c.strip() for c in header_line.split('|')]
+            
+            # Check if next row is a continuation of headers (has column names but no data)
+            next_row_idx = header_row_index + 1
+            headers_row2 = None
+            
+            if next_row_idx < len(lines):
+                next_line = lines[next_row_idx].strip()
+                if next_line.startswith('|') and '---' not in next_line:
+                    # Parse potential second header row
+                    if next_line.startswith('|'): next_line = next_line[1:]
+                    if next_line.endswith('|'): next_line = next_line[:-1]
+                    potential_headers = [c.strip() for c in next_line.split('|')]
+                    
+                    # If this row has meaningful column names (not just empty or "Units"), merge it
+                    has_column_names = any(h and h not in ['Units', 'LOR', 'Guideline', ''] and not h.replace('.','').replace('-','').isdigit() for h in potential_headers)
+                    
+                    if has_column_names:
+                        headers_row2 = potential_headers
+                        print(f"  Detected multi-row header, merging row {next_row_idx}")
+            
+            # Merge headers: If row2 has a value, use it; otherwise use row1
+            if headers_row2:
+                headers = []
+                for i in range(max(len(headers_row1), len(headers_row2))):
+                    h1 = headers_row1[i] if i < len(headers_row1) else ''
+                    h2 = headers_row2[i] if i < len(headers_row2) else ''
+                    # Prefer row2 if it has a value, otherwise row1
+                    headers.append(h2 if h2 else h1)
+                data_start_row = header_row_index + 2  # Skip both header rows
+            else:
+                headers = headers_row1
+                data_start_row = header_row_index + 1
+            
+            # Remove empty headers
+            headers = [h for h in headers if h]
             
             data = []
-            last_row_idx = header_row_index
-            for i in range(header_row_index + 1, len(lines)):
+            last_row_idx = data_start_row
+            for i in range(data_start_row, len(lines)):
                 line = lines[i].strip()
                 last_row_idx = i
                 
