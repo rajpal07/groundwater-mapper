@@ -60,6 +60,7 @@ if excel_file and api_key:
             st.info("New file detected. Resetting previous data.")
             st.session_state['processed_data'] = None
             st.session_state['current_job_id'] = None
+            st.session_state['success_msg'] = None
             st.rerun()
 
     # Pre-process: Detect Sheets

@@ -69,7 +69,11 @@ class SheetAgent:
             line = lines[i].strip()
             # If we hit a new major header that looks like a sheet start (e.g. "Attachment X", "Table Y", or just strict "# ")
             # LlamaParse usually separates significant sections with #
-            if line.startswith("# ") and ("Attachment" in line or "Table" in line or "Sheet" in line):
+            # If we hit a new major header that clearly signals a NEW sheet (e.g. "Attachment X")
+            # We must NOT stop on "Table" headers, as tables are part of the sheet content.
+            if line.startswith("# ") and "Attachment" in line:
+                # Optional: Check if it's the SAME attachment? 
+                # Usually attachments are sequential. If we see another "Attachment", it's a new one.
                 end_index = i
                 print(f"DEBUG: Found End of Sheet Section at line {i}: {line}")
                 break
