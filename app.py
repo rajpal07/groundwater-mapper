@@ -132,9 +132,9 @@ if excel_file and api_key:
         st.warning(f"Error reading Excel structure: {e}")
 
 elif not api_key:
-    st.info("👈 Please provide API Key to start.")
+    st.info("👈 Please provide your API Key in the sidebar to begin.")
 elif not excel_file:
-    st.info("👈 Please upload an Excel file to start.")
+    st.info("👈 Upload an Excel file and click 'Start AI Processing' to begin.")
 
 if st.session_state['processed_data'] is not None:
     df = st.session_state['processed_data']
@@ -256,8 +256,7 @@ if st.session_state['processed_data'] is not None:
             except Exception as e:
                 st.error(f"Map Generation Error: {e}")
 
-else:
-    st.info("👈 Upload Excel and click 'Process with AI Agent' to start.")
+
 
 
 
