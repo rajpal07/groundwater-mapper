@@ -4,6 +4,7 @@ from llama_parse import LlamaParse
 from llama_index.core import SimpleDirectoryReader
 import io
 import re
+import hashlib
 
 class SheetAgent:
     def __init__(self, api_key):
@@ -21,380 +22,182 @@ class SheetAgent:
             language="en"
         )
         
-        # Use SimpleDirectoryReader to load the specific file
+        # Use SimpleDirectoryReader
         file_extractor = {".xlsx": parser}
         reader = SimpleDirectoryReader(input_files=[file_path], file_extractor=file_extractor)
         documents = reader.load_data()
         
-        # Combine all parts (though usually it's one doc per sheet/file)
+        # Combine all parts
         full_text = "\n\n".join([doc.text for doc in documents])
         print("Parsing complete.")
         return full_text
 
-    def extract_chemical_data(self, markdown_text):
+    def smart_extract_sheet(self, sheet_name, markdown_text):
         """
-        Extracts the 'Attachment 3' table (Chemical Data).
-        Handles multi-row headers (Main Header + Sub Header).
+        Generic extractor for ANY sheet.
+        Scans the markdown text looking for the specific sheet section.
+        Then finds the table within it.
         """
-        print("Extracting table data using robust parsing...")
-        
+        print(f"--- Extracting Sheet: {sheet_name} ---")
         lines = markdown_text.split('\n')
         
-        # 1. Locate Table Start (Dynamic)
-        # Strategy: Search for a row containing "Well ID" AND ("Easting" or "Northing")
-        # This handles files where "Attachment 3" is missing or on different rows.
-        
+        # 1. Find Start of Sheet
         start_index = -1
-        signature_found = False
         
+        # Normalize for search (LlamaParse might produce "Sheet Name" or "SheetName")
+        sheet_search = sheet_name.replace('_', ' ').strip()
+        
+        # Scan for Sheet Header
+        # Looking for things like "## <SheetName>" or "### <SheetName>"
+        # or even just text that matches strongly.
         for i, line in enumerate(lines):
-            # Check for Header Signature
-            # Note: LlamaParse tables are pipe-delimited
-            if "Well ID" in line and ("Easting" in line or "Northing" in line or "Eassting" in line):
-                print(f"DEBUG: Found Header Signature at line {i}: '{line.strip()[:50]}...'")
+            if line.strip().startswith("#") and sheet_search.lower() in line.lower():
                 start_index = i
-                signature_found = True
+                print(f"DEBUG: Found Sheet Header for '{sheet_name}' at line {i}: {line[:50]}...")
                 break
-                
-        if start_index == -1:
-             print("Warning: Could not find table with 'Well ID' + 'Easting/Northing'. Checking for just 'Well ID'...")
-             # Fallback: Just "Well ID" (maybe coordinates are on next row)
+        
+        # Fallback: If strict header search fails, look for simple text match if the sheet name is unique/long enough
+        if start_index == -1 and len(sheet_search) > 5:
              for i, line in enumerate(lines):
-                 if "|Well ID|" in line or "| Well ID |" in line:
-                     start_index = i
-                     signature_found = True
-                     print(f"DEBUG: Found potential header at line {i}")
-                     break
-
+                if sheet_search.lower() in line.lower() and (line.startswith("#") or line.startswith("**")):
+                    start_index = i
+                    print(f"DEBUG: Found Loose Sheet Header for '{sheet_name}' at line {i}")
+                    break
+        
+        # If still -1, and we are looking for a SPECIFIC sheet, maybe we just scan the whole file?
+        # But that risks pulling data from other sheets. 
+        # However, if the Excel file is simple, maybe it's fine.
         if start_index == -1:
-             raise ValueError("Could not find Chemical Data Table (looked for 'Well ID').")
+            print(f"Warning: Specific header for '{sheet_name}' not found. scanning from top.")
+            start_index = 0
+            
+        # 2. Find Table Header (Well ID)
+        header_row_index = -1
+        
+        # Look for "Well ID"
+        # We limit the search distance if we found a header to avoid bleeding into next sheet
+        search_limit = len(lines)
+        if start_index > 0:
+            # Try to find the NEXT sheet header to stop searching?
+            # Hard to guess.
+            pass
 
-        # 2. Find the specific Header Rows
-        # Row 1: |Well ID|Sample Date|...|MGA2020...|...
-        # Row 2: ||||Eassting|Northing|...
-        
-        header_row_1 = None
-        header_row_2 = None
-        data_start_index = -1
-        
-        # 2. Extract Headers
-        # We start looking from start_index.
-        
-        header_row_1 = None
-        header_row_2 = None
-        data_start_index = -1
-        
-        current_idx = start_index
-        # Limit search to next 5 lines to find the sub-header
-        for offset in range(0, 5): 
-            if current_idx + offset >= len(lines): break
-            
-            line = lines[current_idx + offset].strip()
-            
-            # Identify Main Header
-            if "Well ID" in line:
-                # Robust split ensuring we keep empty attributes
-                raw_cells = line.strip().split('|')
-                # Markdown tables usually start/end with | so first/last split are empty
-                if len(raw_cells) > 0 and raw_cells[0].strip() == '': raw_cells.pop(0)
-                if len(raw_cells) > 0 and raw_cells[-1].strip() == '': raw_cells.pop(-1)
-                header_row_1 = [c.strip() for c in raw_cells]
-                
-                # Look for Sub-Header (Easting/Northing OR Latitude/Longitude)
-                
-                # Check next line
-                next_offset = 1
-                while current_idx + offset + next_offset < len(lines):
-                    next_line = lines[current_idx + offset + next_offset].strip()
-                    if "---" in next_line: # Skip separator
-                        next_offset += 1
-                        continue
-                        
-                    is_sub_header = False
-                    if "Easting" in next_line or "Northing" in next_line or "Eassting" in next_line:
-                        is_sub_header = True
-                    elif "Latitude" in next_line or "Longitude" in next_line:
-                        is_sub_header = True
-                        
-                    if is_sub_header:
-                         raw_next = next_line.strip().split('|')
-                         if len(raw_next) > 0 and raw_next[0].strip() == '': raw_next.pop(0)
-                         if len(raw_next) > 0 and raw_next[-1].strip() == '': raw_next.pop(-1)
-                         header_row_2 = [c.strip() for c in raw_next]
-                         data_start_index = current_idx + offset + next_offset + 1
-                         break
-                    else:
-                        # Maybe single row header?
-                        # If next line is data (starts with pipe but no keywords), stop
-                        break
-                    next_offset += 1
-                
-                if not header_row_2:
-                    # Assume Single Row Header if E/N/Lat/Lon are in Row 1
-                    if any(x in line for x in ["Easting", "Northing", "Latitude", "Longitude"]):
-                        header_row_2 = [""] * len(header_row_1) # Dummy
-                        data_start_index = current_idx + offset + 1
-                        if current_idx + offset + 1 < len(lines) and "---" in lines[current_idx + offset + 1]:
-                            data_start_index += 1
+        for i in range(start_index, search_limit):
+            line = lines[i]
+            # Check for generic table header
+            if "Well ID" in line and "|" in line:
+                header_row_index = i
                 break
-
-        if not header_row_1:
-             raise ValueError("Found start but failed to parse Headers.")
-        
-        # If still no header 2, we might fail later, but let's try proceed
-        if not header_row_2:
-             header_row_2 = [""] * len(header_row_1)
-
-        print("Headers found. processing columns...")
-        
-        # 3. Combine Headers
-        # If Header 2 has a value, use it (e.g., Easting). If not, use Header 1 (e.g., Well ID).
-        # We need to handle column alignment carefully.
-        
-        # Normalize lengths
-        max_len = max(len(header_row_1), len(header_row_2))
-        header_row_1 += [''] * (max_len - len(header_row_1))
-        header_row_2 += [''] * (max_len - len(header_row_2))
-        
-        final_headers = []
-        for h1, h2 in zip(header_row_1, header_row_2):
-            if h2 and h2 not in ['Units', 'LOR']: # Use sub-header if meaningful
-                final_headers.append(h2)
-            elif h1:
-                final_headers.append(h1)
-            else:
-                final_headers.append("Unknown")
+            # Also check if we hit another header which might mean we missed it
+            if i > start_index + 100 and line.startswith("# "): 
+                # Safety break? No, tables can be long.
+                pass
                 
-        # 4. Extract Data Rows
-        # Iterate from data_start_index until we hit a new section or empty block
-        data_rows = []
-        
-        for i in range(data_start_index, len(lines)):
-            line = lines[i].strip()
-            
-            # Stop conditions
-            if not line: continue # Skip empty lines inside table? Or stop? Markdown tables usually tight.
-            if "Attachment" in line or "Soil" in line or line.startswith("#"): # New section
-                 break
-            
-            if not line.startswith("|"): continue
-            if "---" in line: continue # Separator
-            if "Units" in line or "LOR" in line: continue # Metadata rows
-            if "Assessment Guidelines" in line: continue # Metadata rows
-            
-            # Check if it's a data row (starts with a Well ID-like string)
-            # Use same robust splitting
-            clean_line = line
-            if clean_line.startswith('|'): clean_line = clean_line[1:]
-            if clean_line.endswith('|'): clean_line = clean_line[:-1]
-            
-            cells = [c.strip() for c in clean_line.split('|')]
-            
-            # Pad or truncate
-            if len(cells) < len(final_headers):
-                cells += [''] * (len(final_headers) - len(cells))
-            else:
-                cells = cells[:len(final_headers)]
-            
-            # Simple heuristic: First column must not be empty (Well ID)
-            # Actually, sometimes LlamaParse puts keys in col 1.
-            # Let's just collect everything that looks like a row.
-            data_rows.append(cells)
-
-        print(f"Extracted {len(data_rows)} rows.")
-        
-        df = pd.DataFrame(data_rows, columns=final_headers)
-        return df
-
-    def extract_groundwater_data(self, markdown_text):
-        """
-        Extracts 'Attachment 1' table (Groundwater Levels).
-        Target Columns: Well ID, Static Water Level (mAHD)
-        """
-        print("Extracting Groundwater Levels...")
-        lines = markdown_text.split('\n')
-        
-        start_index = -1
-        # Priority 1: Attachment 1
-        for i, line in enumerate(lines):
-            if "Attachment 1" in line:
-                start_index = i
-                print("DEBUG: Found 'Attachment 1' for Groundwater.")
-                break
-        
-        # Priority 2: Fallback - Search for "Static Water Level" anywhere
-        if start_index == -1:
-             print("Warning: Attachment 1 not found. Scanning globally for 'Static Water Level'...")
-             for i, line in enumerate(lines):
-                  if "Static Water Level" in line and "Well ID" in line:
-                      start_index = i - 1 # Assumption: header is near
-                      print(f"DEBUG: Found Groundwater Header at line {i}")
-                      break
-
-        if start_index == -1:
-            print("Warning: Groundwater headers not found in file. Skipping GW data.")
-            return pd.DataFrame()
-
-        # Find header row
-        # Row with "Static Water Level (mAHD)"
-        header_index = -1
-        target_col = "Static Water Level (mAHD)"
-        well_col = "Well ID"
-        
-        # Search forward from start_index (limit 20 lines)
-        for i in range(start_index, min(len(lines), start_index + 50)):
-            if target_col in lines[i] and well_col in lines[i]:
-                header_index = i
-                break
-            # Relaxed match: maybe just 'Water Level' if 'mAHD' is missing? 
-            # Sticking to exact match for now as per user instruction "Static Water Level (mAHD)"
-        
-        if header_index == -1:
-             print("Warning: Groundwater headers match failed.")
+        if header_row_index == -1:
+             print(f"Skipping Sheet '{sheet_name}': No 'Well ID' header found.")
              return pd.DataFrame()
-
-        # Parse Header
-        header_line = lines[header_index].strip()
+             
+        print(f"Found Table Header at row {header_row_index}")
+        
+        # 3. Parse Header
+        header_line = lines[header_row_index].strip()
         if header_line.startswith('|'): header_line = header_line[1:]
         if header_line.endswith('|'): header_line = header_line[:-1]
+        
         headers = [c.strip() for c in header_line.split('|')]
+        # Filter empty
+        headers = [h for h in headers if h] 
         
-        # Identify indices
-        try:
-            well_idx = next(i for i, h in enumerate(headers) if "Well ID" in h)
-            gw_idx = next(i for i, h in enumerate(headers) if "Static Water Level" in h)
-        except StopIteration:
-            print("Warning: Critical columns missing in Attachment 1.")
-            return pd.DataFrame()
-            
-        # Extract Data
+        # 4. Extract Rows
         data = []
-        
-        for i in range(header_index + 1, len(lines)):
+        for i in range(header_row_index + 1, len(lines)):
             line = lines[i].strip()
-            if not line: continue
-            if "Attachment" in line or line.startswith("#"): 
-                # If we are far from header, this is likely end of table
-                if i > header_index + 5: break 
             
+            # Stop if new Section 
+            if line.startswith("#") and i > header_row_index + 2:
+                break
+     
             if not line.startswith("|"): continue
             if "---" in line: continue
             
-            # Clean split
             clean_line = line
             if clean_line.startswith('|'): clean_line = clean_line[1:]
             if clean_line.endswith('|'): clean_line = clean_line[:-1]
+            
             cells = [c.strip() for c in clean_line.split('|')]
             
-            if len(cells) <= max(well_idx, gw_idx): continue
-            
-            well_id = cells[well_idx]
-            gw_level = cells[gw_idx]
-            
-            # Simple validation: Well ID shouldn't be empty, GW level should be numeric-ish or empty
-            if not well_id or well_id in ['Units', 'LOR']: continue
-            
-            data.append({'Well ID': well_id, 'Static Water Level (mAHD)': gw_level})
-
-        return pd.DataFrame(data)
-
-    def clean_data(self, df):
-        """
-        Cleans the DataFrame:
-        - Ensures numeric types for coordinates and chemicals.
-        - Renames columns if necessary.
-        """
-        print("Cleaning data...")
-        
-        # Deduplicate columns first
-        if df.columns.duplicated().any():
-            print(f"Warning: Duplicate columns found: {df.columns[df.columns.duplicated()].tolist()}. Removing duplicates.")
-            df = df.loc[:, ~df.columns.duplicated()]
-        
-        # 1. Coordinate Cleaning
-        # The markdown might have 'Eassting' (typo) or 'Easting'
-        # Let's normalize column names
-        # STRICT CLEANING: remove anything that isn't alphanumeric, space, or parens
-        # This removes \* \ etc that cause JSON escape errors
-        def clean_col(col_name):
-            # Special case for GW level to ensure exact match if desired, 
-            # but usually the regex below keeps () which is good.
-            # re.sub(r'[^\w\s\(\)\-\.]', '', col_name) keeps ( and )
-            cleaned = re.sub(r'[^\w\s\(\)\-\.]', '', col_name).strip()
-            return cleaned
-
-        df.columns = [clean_col(c) for c in df.columns]
-        
-        # Map common misspellings or variations
-        col_map = {
-            'Eassting': 'Easting',
-            'Northing': 'Northing',
-            'Well ID': 'Well ID',
-            'Sample Date': 'Date',
-            'Latitude': 'Latitude',
-            'Longitude': 'Longitude',
-            'Static Water Level': 'Static Water Level (mAHD)', # Normalize variations
-            'Static Water Level mAHD': 'Static Water Level (mAHD)'
-        }
-        
-        # Apply map if key is found (exact or close?)
-        # For now, precise rename
-        df = df.rename(columns=col_map)
-        
-        # Deduplicate columns (Handle rename collisions)
-        if df.columns.duplicated().any():
-            print(f"Warning: Duplicate columns found after rename: {df.columns[df.columns.duplicated()].tolist()}. Keeping first.")
-            df = df.loc[:, ~df.columns.duplicated()]
-        
-        # 2. Convert Numeric Columns
-        # Identify columns that should be numeric (Easting, Northing, Chemicals)
-        # We basically want everything except 'Well ID', 'Date', 'Time' to be numeric
-        exclude_cols = ['Well ID', 'Date', 'Time', 'MGA2020 / MGA Zone 54']
-        
-        for col in df.columns:
-            if col not in exclude_cols:
-                # Force numeric, coerce errors to NaN
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-        
-        # 3. Drop rows where Well ID or Coordinates are missing
-        # Check for E/N OR Lat/Lon
-        has_coords = False
-        if 'Easting' in df.columns and 'Northing' in df.columns:
-            df = df.dropna(subset=['Easting', 'Northing'])
-            has_coords = True
-        elif 'Latitude' in df.columns and 'Longitude' in df.columns:
-            df = df.dropna(subset=['Latitude', 'Longitude'])
-            has_coords = True
-            
-        if not has_coords:
-             print("Warning: No valid coordinate columns (Easting/Northing or Lat/Lon) found.")
-       
-        print("Data cleaning complete.")
+            # Align
+            if len(cells) > len(headers):
+                 cells = cells[:len(headers)]
+            elif len(cells) < len(headers):
+                 cells += [''] * (len(headers) - len(cells))
+                 
+            row_dict = {}
+            has_data = False
+            for h, c in zip(headers, cells):
+                row_dict[h] = c
+                if c: has_data = True
+                
+            if has_data and row_dict.get(headers[0]): # Check first col (Well ID)
+                 val = row_dict[headers[0]]
+                 if val in ['Units', 'LOR', 'Guideline', 'None', '']: continue
+                 data.append(row_dict)
+                 
+        df = pd.DataFrame(data)
         return df
 
-    def process(self, file_path, output_path=None):
+    def clean_sheet_data(self, df):
+        """
+        Cleans a single sheet's data. 
+        """
+        # 1. Normalize Columns
+        new_cols = []
+        for c in df.columns:
+            # Clean special chars (keep parens)
+            c_clean = re.sub(r'[^\w\s\(\)\-\.]', '', c).strip()
+            
+            # Map Common Variations
+            if c_clean in ['Eassting', 'Easting_1']: c_clean = 'Easting'
+            if c_clean in ['Northing_1']: c_clean = 'Northing'
+            if c_clean in ['Waell ID', 'Well_ID']: c_clean = 'Well ID'
+            
+            # Standardize Groundwater
+            if 'Static Water' in c_clean or 'Water Level' in c_clean:
+                 # Ensure we keep unit if present, or standardize?
+                 # User likes "Static Water Level (mAHD)"
+                 if 'mAHD' in c_clean:
+                      c_clean = "Static Water Level (mAHD)"
+                      
+            new_cols.append(c_clean)
+            
+        df.columns = new_cols
+        
+        # 2. Ensure Numeric
+        # Exclude metadata columns
+        exclude_cols = ['Well ID', 'Date', 'Time', 'Sample ID', 'Comments']
+        for c in df.columns:
+            if c not in exclude_cols:
+                df[c] = pd.to_numeric(df[c], errors='coerce')
+                
+        return df
+
+    def process(self, file_path, output_path=None, selected_sheets=None):
         """
         Main execution method.
         """
         print(f"Running agent on {file_path}...")
         
         # 1. Parse File
-        # Cache based on FILE CONTENT Hash to avoid collision for 'temp_upload.xlsx'
-        import hashlib
         with open(file_path, "rb") as f:
             file_bytes = f.read()
             file_hash = hashlib.md5(file_bytes).hexdigest()
             
-        # Use a central cache dir or job specific? 
-        # For now, let's keep cache alongside or global. 
-        # Global cache is actually good for LlamaParse (saves $$).
         cache_file = f"cache_llama_{file_hash}.md"
         
         if not os.path.exists(cache_file):
-            print("Parsing file (this may take a moment)...")
+            print("Parsing file...")
             try:
                 markdown_output = self.parse_raw_file(file_path)
-                # Save for debugging/caching
                 with open(cache_file, "w", encoding="utf-8") as f:
                     f.write(markdown_output)
             except Exception as e:
@@ -406,52 +209,96 @@ class SheetAgent:
                 markdown_output = f.read()
 
         # 2. Extract Data
-        chem_df = self.extract_chemical_data(markdown_output)
-        gw_df = self.extract_groundwater_data(markdown_output)
+        dfs = []
         
+        # If no sheets selected, try to infer from file? 
+        # (This tool runs after App.py reads excel structure, so likely we have sheets)
+        if not selected_sheets:
+             print("No sheets supplied. Attempting blind extraction (fallback).")
+             # Fallback: Treat whole doc as one big search space for "Well ID"
+             # This is weak but prevents total failure if called from CLI without args.
+             # We create a dummy sheet name "Detected Table"
+             df_blind = self.smart_extract_sheet("Detected Table", markdown_output)
+             if not df_blind.empty:
+                 dfs.append(("Auto", self.clean_sheet_data(df_blind)))
+        else:
+             for sheet in selected_sheets:
+                 df_sheet = self.smart_extract_sheet(sheet, markdown_output)
+                 if not df_sheet.empty:
+                     cleaned_df = self.clean_sheet_data(df_sheet)
+                     dfs.append((sheet, cleaned_df))
+
+        if not dfs:
+             print("No data extracted from any sheet.")
+             return None
+
         # 3. Merge
-        print("Merging datasets...")
-        if not chem_df.empty and not gw_df.empty:
-            # Clean Well IDs for merging (strip whitespace)
-            chem_df['Well ID'] = chem_df['Well ID'].astype(str).str.strip()
-            gw_df['Well ID'] = gw_df['Well ID'].astype(str).str.strip()
+        print("Merging extracted sheets...")
+        final_df = None
+        
+        for sheet_name, df in dfs:
+            if 'Well ID' not in df.columns: continue
             
-            # Check if GW column exists in chem_df
-            gw_col = 'Static Water Level (mAHD)'
+            # Normalize Key
+            df['Well ID'] = df['Well ID'].astype(str).str.strip()
             
-            # Normalize column names in both DFs first for consistent checking
-            # (We usually do clean_data AFTER merge, but for checking duplicates we need to know)
-            # A quick check:
-            chem_cols = [c for c in chem_df.columns if "Static Water Level" in c]
-            
-            if chem_cols:
-                print(f"Groundwater data already in Chemical Table (Columns: {chem_cols}). Ignoring separate GW data to prevent duplicates.")
-                final_df = chem_df
+            if final_df is None:
+                final_df = df
+                # Suffix columns for the FIRST sheet too, if we expect collisions?
+                # User Policy: "keep that column for that sheet"
+                # If we have Sheet1 (col A) and Sheet2 (col A), we want A(Sheet1) and A(Sheet2).
+                # So yes, we should suffix ALL non-key columns always?
+                # OR only suffix if collision?
+                # User said: "we will have to keep that column for that sheet".
+                # To be explicit and avoiding confusion, let's suffix EVERYTHING with sheet name,
+                # EXCEPT maybe Easting/Northing which we coalesce?
+                # Let's suffix everything. It's safer.
+                
+                new_cols = {}
+                for c in final_df.columns:
+                    if c != 'Well ID':
+                        new_cols[c] = f"{c} ({sheet_name})"
+                final_df = final_df.rename(columns=new_cols)
+                
             else:
-                merged_df = pd.merge(chem_df, gw_df, on='Well ID', how='left')
-                final_df = merged_df
+                # Prepare next DF
+                new_cols = {}
+                for c in df.columns:
+                    if c != 'Well ID':
+                        new_cols[c] = f"{c} ({sheet_name})"
+                df = df.rename(columns=new_cols)
                 
-        elif not chem_df.empty:
-            final_df = chem_df
-            print("Warning: Groundwater data missing (or integrated), using only chemical data.")
-        else:
-             final_df = pd.DataFrame()
-             print("Error: No data extracted.")
-
-        # 4. Clean & Save
-        if not final_df.empty:
-            cleaned_df = self.clean_data(final_df)
-            
-            if output_path is None:
-                output_path = "processed_data.xlsx" # Fallback
+                # Outer Merge
+                final_df = pd.merge(final_df, df, on='Well ID', how='outer')
                 
-            # Ensure dir exists
-            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-            
-            cleaned_df.to_excel(output_path, index=False)
-            print(f"Successfully saved processed data to: {output_path}")
-            return output_path
-        else:
-            print("Failed to extract data.")
+        # 4. Final Processing
+        if final_df is None or final_df.empty:
             return None
+            
+        # Coalesce Coordinates for Map
+        # We look for ANY "Easting *" and "Northing *" column
+        print("Coalescing Coordinates...")
+        
+        easting_cols = [c for c in final_df.columns if "Easting" in c]
+        northing_cols = [c for c in final_df.columns if "Northing" in c]
+        
+        # Use bfill to get the first available coordinate
+        if easting_cols:
+             final_df['Easting'] = final_df[easting_cols].bfill(axis=1).iloc[:, 0]
+        if northing_cols:
+             final_df['Northing'] = final_df[northing_cols].bfill(axis=1).iloc[:, 0]
+             
+        # Lat/Lon
+        lat_cols = [c for c in final_df.columns if "Latitude" in c]
+        lon_cols = [c for c in final_df.columns if "Longitude" in c]
+        
+        if lat_cols: final_df['Latitude'] = final_df[lat_cols].bfill(axis=1).iloc[:, 0]
+        if lon_cols: final_df['Longitude'] = final_df[lon_cols].bfill(axis=1).iloc[:, 0]
 
+        # Save
+        if output_path is None: output_path = "processed_data.xlsx"
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        final_df.to_excel(output_path, index=False)
+        print(f"Saved merged data to {output_path}")
+        
+        return output_path

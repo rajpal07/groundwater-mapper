@@ -1,4 +1,10 @@
 import streamlit as st
+import sys
+import os
+
+# Add the current directory to sys.path to ensure 'src' module can be found
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 import src.geo as geo
 import src.data as data
 import src.visualization as viz
@@ -41,38 +47,64 @@ with st.sidebar:
     
     st.header("2. AI Processing")
     if excel_file and api_key:
-        if st.button("Process with AI Agent", type="primary"):
-            with st.spinner("AI Agent is reading the Excel file..."):
-                try:
-                    # Generic unique Job ID
-                    job_id = str(uuid.uuid4())
-                    job_dir = os.path.join("runs", job_id)
-                    os.makedirs(job_dir, exist_ok=True)
-                    
-                    # Save temp file for Agent
-                    input_path = os.path.join(job_dir, "original.xlsx")
-                    with open(input_path, "wb") as f:
-                        f.write(excel_file.getbuffer())
-                    
-                    # Run Agent
-                    agent = SheetAgent(api_key=api_key)
-                    # Use 'process' method which returns path to processed_data.xlsx
-                    # Note: Agent saves to 'processed_data.xlsx' locally
-                    output_path = os.path.join(job_dir, "processed.xlsx")
-                    result_path = agent.process(input_path, output_path=output_path)
-                    
-                    if result_path and os.path.exists(result_path):
-                        # Load into Session State
-                        df = pd.read_excel(result_path)
-                        st.session_state['processed_data'] = df
-                        st.session_state['processed_source'] = excel_file.name
-                        st.session_state['current_job_id'] = job_id
-                        st.success(f"Processed {len(df)} rows successfully! (Job ID: {job_id})")
-                    else:
-                        st.error("Agent failed to extract data.")
-                        
-                except Exception as e:
-                    st.error(f"AI Processing failed: {e}")
+        # Pre-process: Detect Sheets
+        try:
+            # Check sheet names immediately (fast)
+            xls = pd.ExcelFile(excel_file)
+            sheet_names = xls.sheet_names
+            
+            selected_sheets = []
+            if len(sheet_names) > 1:
+                st.info(f"Detected {len(sheet_names)} sheets.")
+                # Default: Select all? Or none? User said "user selects which sheet".
+                # Let's select all by default so they can just click "Process" if lazy.
+                selected_sheets = st.multiselect("Select Sheets to Process", sheet_names, default=sheet_names)
+            else:
+                # One sheet: Auto select without UI
+                selected_sheets = sheet_names
+            
+            if st.button("Process with AI Agent", type="primary"):
+                if not selected_sheets:
+                    st.warning("Please select at least one sheet.")
+                else:
+                    with st.spinner("AI Agent is reading the Excel file..."):
+                        try:
+                            # Generic unique Job ID
+                            job_id = str(uuid.uuid4())
+                            job_dir = os.path.join("runs", job_id)
+                            os.makedirs(job_dir, exist_ok=True)
+                            
+                            # Save temp file for Agent
+                            # Note: excel_file is a stream, we need to reset it or re-read buffer if we used pd.ExcelFile? 
+                            # pd.ExcelFile reads header, but doesn't consume stream destructively typically if bytes passed?
+                            # Streamlit file uploader buffer stays valid.
+                            
+                            input_path = os.path.join(job_dir, "original.xlsx")
+                            with open(input_path, "wb") as f:
+                                f.write(excel_file.getbuffer())
+                            
+                            # Run Agent
+                            agent = SheetAgent(api_key=api_key)
+                            output_path = os.path.join(job_dir, "processed.xlsx")
+                            
+                            # NEW: Pass selected_sheets
+                            result_path = agent.process(input_path, output_path=output_path, selected_sheets=selected_sheets)
+                            
+                            if result_path and os.path.exists(result_path):
+                                # Load into Session State
+                                df = pd.read_excel(result_path)
+                                st.session_state['processed_data'] = df
+                                st.session_state['processed_source'] = excel_file.name
+                                st.session_state['current_job_id'] = job_id
+                                st.success(f"Processed {len(df)} rows from sheets: {selected_sheets}")
+                            else:
+                                st.error("Agent failed to extract data.")
+                                
+                        except Exception as e:
+                            st.error(f"AI Processing failed: {e}")
+        except Exception as e:
+            st.warning(f"Error reading Excel structure: {e}")
+            
     elif not api_key:
         st.warning("Please provide Llama Cloud API Key in Sidebar or Secrets.")
 
