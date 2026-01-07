@@ -292,27 +292,27 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
 <!-- Legend with Resize Handles -->
 <style>
 /* Resize handles for legend */
-.resize-handle {
+.resize-handle {{
   position: absolute;
   background: rgba(0, 0, 0, 0.1);
   transition: background 0.2s;
-}
-.resize-handle:hover {
+}}
+.resize-handle:hover {{
   background: rgba(0, 120, 215, 0.5);
-}
+}}
 /* Corner handles */
-.resize-nw { top: 0; left: 0; width: 10px; height: 10px; cursor: nw-resize; }
-.resize-ne { top: 0; right: 0; width: 10px; height: 10px; cursor: ne-resize; }
-.resize-sw { bottom: 0; left: 0; width: 10px; height: 10px; cursor: sw-resize; }
-.resize-se { bottom: 0; right: 0; width: 10px; height: 10px; cursor: se-resize; }
+.resize-nw {{ top: 0; left: 0; width: 10px; height: 10px; cursor: nw-resize; }}
+.resize-ne {{ top: 0; right: 0; width: 10px; height: 10px; cursor: ne-resize; }}
+.resize-sw {{ bottom: 0; left: 0; width: 10px; height: 10px; cursor: sw-resize; }}
+.resize-se {{ bottom: 0; right: 0; width: 10px; height: 10px; cursor: se-resize; }}
 /* Edge handles */
-.resize-n { top: 0; left: 10px; right: 10px; height: 5px; cursor: n-resize; }
-.resize-s { bottom: 0; left: 10px; right: 10px; height: 5px; cursor: s-resize; }
-.resize-w { left: 0; top: 10px; bottom: 10px; width: 5px; cursor: w-resize; }
-.resize-e { right: 0; top: 10px; bottom: 10px; width: 5px; cursor: e-resize; }
+.resize-n {{ top: 0; left: 10px; right: 10px; height: 5px; cursor: n-resize; }}
+.resize-s {{ bottom: 0; left: 10px; right: 10px; height: 5px; cursor: s-resize; }}
+.resize-w {{ left: 0; top: 10px; bottom: 10px; width: 5px; cursor: w-resize; }}
+.resize-e {{ right: 0; top: 10px; bottom: 10px; width: 5px; cursor: e-resize; }}
 </style>
 
-<div id="map-legend" style="position:fixed; bottom:10px; right:10px; z-index:100000 !important; background:rgba(255,255,255,0.95); padding:10px; border-radius:6px; font-family:Arial,Helvetica,sans-serif; font-size:12px; box-shadow:0 0 5px rgba(0,0,0,0.2); cursor:move; min-width:150px; min-height:100px;">
+<div id="map-legend" style="position:fixed; bottom:10px; right:10px; z-index:100000 !important; background:rgba(255,255,255,0.95); padding:10px; border-radius:6px; font-family:Arial,Helvetica,sans-serif; font-size:12px; box-shadow:0 0 5px rgba(0,0,0,0.2); cursor:move; min-width:150px; min-height:100px; box-sizing:border-box;">
   <!-- Resize Handles -->
   <div class="resize-handle resize-nw"></div>
   <div class="resize-handle resize-ne"></div>
@@ -323,33 +323,33 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
   <div class="resize-handle resize-w"></div>
   <div class="resize-handle resize-e"></div>
   
-  <div id="legend-content" style="width:100%; height:100%;">
-    <div style="font-weight:bold; margin-bottom:8px; border-bottom:1px solid #ddd; padding-bottom:4px;">Legend</div>
+  <div id="legend-content" style="width:100%; height:100%; overflow:auto; box-sizing:border-box; padding-right:5px;">
+    <div style="font-weight:bold; margin-bottom:8px; border-bottom:1px solid #ddd; padding-bottom:4px; word-wrap:break-word;">Legend</div>
     
     <!-- Points -->
-    <div style="display:flex; align-items:center; margin-bottom:10px;">
-      <div style="width:12px; height:12px; background:#FF6B35; border-radius:50%; border:2px solid white; margin-right:8px;"></div>
-      <span>Monitoring Bore</span>
+    <div style="display:flex; align-items:center; margin-bottom:10px; flex-wrap:wrap;">
+      <div style="width:12px; height:12px; background:#FF6B35; border-radius:50%; border:2px solid white; margin-right:8px; flex-shrink:0;"></div>
+      <span style="word-wrap:break-word; overflow-wrap:break-word;">Monitoring Bore</span>
     </div>
 
     <!-- Contour Guide -->
-    <div style="font-weight:bold; margin-bottom:6px; margin-top:8px; border-top:1px solid #ddd; padding-top:6px;">How to Read Contour</div>
+    <div style="font-weight:bold; margin-bottom:6px; margin-top:8px; border-top:1px solid #ddd; padding-top:6px; word-wrap:break-word;">How to Read Contour</div>
     
     <!-- High Gradient -->
-    <div style="display:flex; align-items:center; margin-bottom:4px;">
-      <div style="width:20px; height:10px; background:linear-gradient(to right, {mid_hex}, {high_hex}); margin-right:8px; border:1px solid #999;"></div>
-      <span>High {legend_label_short} ({high_desc})</span>
+    <div style="display:flex; align-items:center; margin-bottom:4px; flex-wrap:wrap;">
+      <div style="width:20px; height:10px; background:linear-gradient(to right, {mid_hex}, {high_hex}); margin-right:8px; border:1px solid #999; flex-shrink:0;"></div>
+      <span style="word-wrap:break-word; overflow-wrap:break-word; flex:1; min-width:0;">High {legend_label_short} ({high_desc})</span>
     </div>
     
     <!-- Low Gradient -->
-    <div style="display:flex; align-items:center; margin-bottom:4px;">
-      <div style="width:20px; height:10px; background:linear-gradient(to right, {low_hex}, {mid_hex}); margin-right:8px; border:1px solid #999;"></div>
-      <span>Low {legend_label_short} ({low_desc})</span>
+    <div style="display:flex; align-items:center; margin-bottom:4px; flex-wrap:wrap;">
+      <div style="width:20px; height:10px; background:linear-gradient(to right, {low_hex}, {mid_hex}); margin-right:8px; border:1px solid #999; flex-shrink:0;"></div>
+      <span style="word-wrap:break-word; overflow-wrap:break-word; flex:1; min-width:0;">Low {legend_label_short} ({low_desc})</span>
     </div>
     
-    <div style="display:flex; align-items:center;">
-      <div style="font-size:16px; color:red; font-weight:bold; margin-right:8px; line-height:10px;">&rarr;</div>
-      <span>Flow Direction</span>
+    <div style="display:flex; align-items:center; flex-wrap:wrap;">
+      <div style="font-size:16px; color:red; font-weight:bold; margin-right:8px; line-height:10px; flex-shrink:0;">&rarr;</div>
+      <span style="word-wrap:break-word; overflow-wrap:break-word;">Flow Direction</span>
     </div>
   </div>
 </div>
