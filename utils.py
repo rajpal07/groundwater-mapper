@@ -907,6 +907,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     <span>Flow Direction</span>
   </div>
 </div>
+"""
 
     # Logic for Logo HTML (Pre-calc)
     logo_html_str = ""
@@ -914,13 +915,9 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         logo_html_str = f'<img src="data:image/png;base64,{logo_base64}" class="logo-img" alt="Project Logo">'
     else:
         # Default placeholder or empty
-        logo_html_str = \"\"\"
-        <div style="text-align:center; color:#ccc;">
-            <div style="font-size:12px;">(Logo Space)</div>
-        </div>
-        \"\"\"
+        logo_html_str = '<div style="text-align:center; color:#ccc;"><div style="font-size:12px;">(Logo Space)</div></div>'
 
-    js_code = f"""
+    footer_html = f'''
 <!-- Force Hide Leaflet Controls -->
 <style>
 /* ... (Leaflet styles same as before) ... */
@@ -929,9 +926,9 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         <!-- CELL 1: GENERAL NOTES -->
         <div class="footer-cell cell-notes">
             <div style="font-weight:bold; margin-bottom:4px; text-decoration: underline;">GENERAL NOTES:</div>
-            <div>{{pd_safe['general_notes']}}</div>
+            <div>{{pd_safe["general_notes"]}}</div>
              <div style="position: absolute; bottom: 5px; left: 8px; font-size: 10px; color: #555;">
-               SOURCE: NEARMAP {pd_safe['date']} <!-- Placeholder source -->
+               SOURCE: NEARMAP {pd_safe["date"]} <!-- Placeholder source -->
             </div>
         </div>
         
@@ -945,42 +942,42 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         <div class="footer-cell cell-details">
             <!-- Row 1 -->
             <div class="footer-label">Client:</div>
-            <div class="footer-value"><strong>{{pd_safe['client']}}</strong></div>
+            <div class="footer-value"><strong>{{pd_safe["client"]}}</strong></div>
             
             <!-- Row 2 -->
             <div class="footer-label">Project:</div>
-            <div class="footer-value">{{pd_safe['project']}}</div>
+            <div class="footer-value">{{pd_safe["project"]}}</div>
             
             <!-- Row 3 -->
             <div class="footer-label">Location:</div>
-            <div class="footer-value">{{pd_safe['address']}}</div>
+            <div class="footer-value">{{pd_safe["address"]}}</div>
             
             <!-- Row 4 -->
             <div class="footer-label">Drawing Title:</div>
-            <div class="footer-value" style="font-size:11px; font-weight:bold;">{{pd_safe['drawing_title']}}</div>
+            <div class="footer-value" style="font-size:11px; font-weight:bold;">{{pd_safe["drawing_title"]}}</div>
             
              <!-- Row 5 (Split grid for Drawn/ProjectNo) -->
              <!-- Making it simple rows for reliability -->
             <div class="footer-label">Drawn:</div>
-            <div class="footer-value">{{pd_safe['drawn_by']}}</div>
+            <div class="footer-value">{{pd_safe["drawn_by"]}}</div>
             
             <div class="footer-label">Project No:</div>
-            <div class="footer-value">{{pd_safe['job_no']}}</div>
+            <div class="footer-value">{{pd_safe["job_no"]}}</div>
             
             <div class="footer-label">Date:</div>
-            <div class="footer-value">{{pd_safe['date']}}</div>
+            <div class="footer-value">{{pd_safe["date"]}}</div>
             
             <div class="footer-label">Figure No:</div>
             <div class="footer-value">1 Rev. A</div>
         </div>
     </div>
 </div>
-"""
+'''
 
-    js_code = f"""
+    js_code += f'''
+{footer_html}
 <!-- Force Hide Leaflet Controls -->
 <style>
-/* ... (Leaflet styles same as before) ... */
 /* Hide Zoom Control */
 .leaflet-control-zoom {{
     display: none !important;
@@ -1757,7 +1754,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
   init();
 }})();
 </script>
-"""
+'''
 
     # Inject the script - try </body> first, then </html>, then just append
     print(f"DEBUG: Reading file {html_file}, size: {len(html)}")
