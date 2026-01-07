@@ -32,65 +32,47 @@ class SheetAgent:
         print("Parsing complete.")
         return full_text
 
-    def smart_extract_sheet(self, sheet_name, markdown_text):
+    def smart_extract_sheet(self, sheet_name, file_path):
         """
-        Generic extractor for ANY sheet.
-        Scans the markdown text looking for the specific sheet section.
-        Then finds ALL tables within it that have 'Well ID'.
-        Merges them horizontally.
+        Extracts data from a specific sheet by:
+        1. Extracting that sheet to a temporary Excel file
+        2. Parsing it with LlamaParse (guarantees isolation)
+        3. Extracting tables from the markdown
+        
+        This eliminates the need for fuzzy header matching.
         """
-        print(f"--- Extracting Sheet: {sheet_name} ---")
-        lines = markdown_text.split('\n')
+        import tempfile
         
-        # 1. Find Start of Sheet
-        start_index = -1
-        sheet_search = sheet_name.replace('_', ' ').strip()
+        print(f"\n=== Processing Sheet: {sheet_name} ===")
         
-        for i, line in enumerate(lines):
-            if line.strip().startswith("#") and sheet_search.lower() in line.lower():
-                start_index = i
-                print(f"DEBUG: Found Sheet Header for '{sheet_name}' at line {i}")
-                break
+        # 1. Extract this specific sheet to a temp file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+        temp_path = temp_file.name
+        temp_file.close()
         
-        if start_index == -1 and len(sheet_search) > 5:
-             for i, line in enumerate(lines):
-                if sheet_search.lower() in line.lower() and (line.startswith("#") or line.startswith("**")):
-                    start_index = i
-                    print(f"DEBUG: Found Loose Sheet Header for '{sheet_name}' at line {i}")
-                    break
-        
-        if start_index == -1:
-            print(f"Warning: Specific header for '{sheet_name}' not found. scanning from top.")
-            start_index = 0
+        try:
+            # Read only this sheet and write to temp file
+            df_temp = pd.read_excel(file_path, sheet_name=sheet_name)
+            df_temp.to_excel(temp_path, index=False, sheet_name=sheet_name)
             
-        # 2. Find End of Sheet (next header)
-        end_index = len(lines)
-        for i in range(start_index + 1, len(lines)):
-            line = lines[i].strip()
-            # If we hit a new major header that looks like a sheet start (e.g. "Attachment X", "Table Y", or just strict "# ")
-            # LlamaParse usually separates significant sections with #
-            # If we hit a new major header that clearly signals a NEW sheet (e.g. "Attachment X")
-            # We must NOT stop on "Table" headers, as tables are part of the sheet content.
-            if line.startswith("# ") and "Attachment" in line:
-                # Optional: Check if it's the SAME attachment? 
-                # Usually attachments are sequential. If we see another "Attachment", it's a new one.
-                end_index = i
-                print(f"DEBUG: Found End of Sheet Section at line {i}: {line}")
-                break
+            # 2. Parse the isolated sheet
+            markdown_text = self.parse_raw_file(temp_path)
+            
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
         
-        # SLICE the context to only this sheet
-        sheet_lines = lines[start_index:end_index]
-        print(f"DEBUG: Analyzing {len(sheet_lines)} lines for sheet '{sheet_name}'")
-
-        # 3. Find ALL Tables in this section
+        # 3. Extract ALL tables from this markdown (now guaranteed to be only this sheet)
+        lines = markdown_text.split('\n')
         tables = []
         
-        current_idx = 0 # Relative to sheet_lines
-        while current_idx < len(sheet_lines):
+        current_idx = 0
+        while current_idx < len(lines):
             # Find next table header
             header_row_index = -1
-            for i in range(current_idx, len(sheet_lines)):
-                if "Well ID" in sheet_lines[i] and "|" in sheet_lines[i]:
+            for i in range(current_idx, len(lines)):
+                if "Well ID" in lines[i] and "|" in lines[i]:
                     header_row_index = i
                     break
             
@@ -98,9 +80,9 @@ class SheetAgent:
                 break # No more tables
             
             # --- Extract Table ---
-            # print(f"Found Table Header at relative row {header_row_index}")
+            print(f"Found Table Header at line {header_row_index}")
             
-            header_line = sheet_lines[header_row_index].strip()
+            header_line = lines[header_row_index].strip()
             if header_line.startswith('|'): header_line = header_line[1:]
             if header_line.endswith('|'): header_line = header_line[:-1]
             headers = [c.strip() for c in header_line.split('|')]
@@ -108,13 +90,13 @@ class SheetAgent:
             
             data = []
             last_row_idx = header_row_index
-            for i in range(header_row_index + 1, len(sheet_lines)):
-                line = sheet_lines[i].strip()
+            for i in range(header_row_index + 1, len(lines)):
+                line = lines[i].strip()
                 last_row_idx = i
                 
                 # Stop if new Section 
                 if line.startswith("#"): break
-                if not line.startswith("|") and len(line) > 5: break # End of table text?
+                if not line.startswith("|") and len(line) > 5: break
                 
                 if not line.startswith("|"): continue
                 if "---" in line: continue
@@ -156,9 +138,6 @@ class SheetAgent:
             if 'Well ID' in df.columns: df['Well ID'] = df['Well ID'].astype(str).str.strip()
             
             # Merge
-            # Suffix columns to avoid collision within same sheet?
-            # Or just update? Usually different tables have different columns.
-            # If duplicates, suffix.
             final_sheet_df = pd.merge(final_sheet_df, df, on='Well ID', how='outer', suffixes=('', '_dup'))
             
         return final_sheet_df
@@ -225,25 +204,21 @@ class SheetAgent:
              with open(cache_file, "r", encoding="utf-8") as f:
                 markdown_output = f.read()
 
-        # 2. Extract Data
+        # 2. Extract Data from Selected Sheets
         dfs = []
         
-        # If no sheets selected, try to infer from file? 
-        # (This tool runs after App.py reads excel structure, so likely we have sheets)
         if not selected_sheets:
-             print("No sheets supplied. Attempting blind extraction (fallback).")
-             # Fallback: Treat whole doc as one big search space for "Well ID"
-             # This is weak but prevents total failure if called from CLI without args.
-             # We create a dummy sheet name "Detected Table"
-             df_blind = self.smart_extract_sheet("Detected Table", markdown_output)
-             if not df_blind.empty:
-                 dfs.append(("Auto", self.clean_sheet_data(df_blind)))
-        else:
-             for sheet in selected_sheets:
-                 df_sheet = self.smart_extract_sheet(sheet, markdown_output)
-                 if not df_sheet.empty:
-                     cleaned_df = self.clean_sheet_data(df_sheet)
-                     dfs.append((sheet, cleaned_df))
+             print("No sheets supplied. Attempting to read all sheets from file.")
+             # Read all sheet names from the Excel file
+             xls = pd.ExcelFile(file_path)
+             selected_sheets = xls.sheet_names
+             print(f"Auto-detected sheets: {selected_sheets}")
+        
+        for sheet in selected_sheets:
+            df_sheet = self.smart_extract_sheet(sheet, file_path)
+            if not df_sheet.empty:
+                cleaned_df = self.clean_sheet_data(df_sheet)
+                dfs.append((sheet, cleaned_df))
 
         if not dfs:
              print("No data extracted from any sheet.")
