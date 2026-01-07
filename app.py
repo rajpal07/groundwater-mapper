@@ -71,32 +71,37 @@ if excel_file and api_key:
         selected_sheets = []
         if len(sheet_names) > 1:
             st.info(f"File contains {len(sheet_names)} sheets. Select which ones to analyze:")
-            selected_sheets = st.multiselect("Select Sheets", sheet_names, default=sheet_names, key="sheet_selector")
+            # Default: Select ONLY the first sheet (usually the relevant one)
+            st.multiselect("Select Sheets", sheet_names, default=sheet_names[0:1], key="sheet_selector")
         else:
             # One sheet: Auto select without UI
-            selected_sheets = sheet_names
-        
+            # We must still populate the widget/variable even if hidden
+            # But here we just use logic
+            pass # We use sheet_names directly in logic below if selector not used
+
         # Button in Main Area
         if st.button("Start AI Processing", type="primary"):
+            # Get selection
+            selected_sheets = st.session_state.get("sheet_selector", sheet_names)
+            
             if not selected_sheets:
                 st.warning("Please select at least one sheet.")
             else:
                 with st.spinner("AI Agent is reading the Excel file..."):
                     try:
-                        # Generic unique Job ID
-                        job_id = str(uuid.uuid4())
-                        job_dir = os.path.join("runs", job_id)
-                        os.makedirs(job_dir, exist_ok=True)
+                        # Job ID for caching
+                        job_id = str(uuid.uuid4())[:8]
                         
-                        # Save temp file for Agent
-                        excel_file.seek(0) # Reset again before saving
-                        input_path = os.path.join(job_dir, "original.xlsx")
+                        # Save temp file
+                        input_path = f"temp_input_{job_id}.xlsx"
+                        output_path = f"processed_{job_id}.xlsx"
+                        
                         with open(input_path, "wb") as f:
-                            f.write(excel_file.getbuffer())
+                            excel_file.seek(0)
+                            f.write(excel_file.read())
                         
-                        # Run Agent
+                        # Init Agent
                         agent = SheetAgent(api_key=api_key)
-                        output_path = os.path.join(job_dir, "processed.xlsx")
                         
                         # NEW: Pass selected_sheets
                         result_path = agent.process(input_path, output_path=output_path, selected_sheets=selected_sheets)
@@ -107,7 +112,7 @@ if excel_file and api_key:
                             st.session_state['processed_data'] = df
                             st.session_state['processed_source'] = excel_file.name
                             st.session_state['current_job_id'] = job_id
-                            st.session_state['success_msg'] = f"Processed {len(df)} rows from sheets: {selected_sheets}"
+                            st.session_state['success_msg'] = f"Processed {len(df)} rows from sheets: {selected_sheets} (Job ID: {job_id})"
                             st.rerun() # Force refresh to show map settings
                         else:
                             st.error("Agent failed to extract data.")
@@ -131,18 +136,9 @@ if st.session_state['processed_data'] is not None:
         # Clear it so it doesn't stay forever (actually, maybe keep it?)
         # Let's keep it until new file upload clears session state.
 
-    
-    # --- HOTFIX: Force clean columns to prevent cached bad data ---
-    # remove \ and * just in case old session state data is used
-    if df is not None:
-        import re
-        def clean_col_app(c):
-             return re.sub(r'[^\w\s\(\)\-\.]', '', c).strip()
-        df.columns = [clean_col_app(c) for c in df.columns]
-        st.session_state['processed_data'] = df # Update state
-    # -------------------------------------------------------------
-        
-    st.write(f"✅ Data Loaded from {st.session_state['processed_source']}")
+    # Display Job ID explicitly
+    if st.session_state.get('current_job_id'):
+        st.caption(f"Active Job ID: {st.session_state['current_job_id']}")
     
     # Unified Dropdown
     st.header("3. Map Settings")

@@ -64,32 +64,29 @@ class SheetAgent:
             start_index = 0
             
         # 2. Find End of Sheet (next header)
-        # We limit the search distance to avoid bleeding
-        search_limit = len(lines)
+        end_index = len(lines)
         for i in range(start_index + 1, len(lines)):
-            if lines[i].startswith("# ") or lines[i].startswith("## "):
-                # If we encounter a new major header, assume end of current sheet section
-                # But be careful not to stop on a sub-header like "Table 1"
-                # Heuristic: If it looks like a Sheet Name we might stop.
-                # For now, let's just use the whole file if uncertain, but ideally we stop.
-                # Let's assume strict sheet boundaries are hard to define blindly.
-                pass
+            line = lines[i].strip()
+            # If we hit a new major header that looks like a sheet start (e.g. "Attachment X", "Table Y", or just strict "# ")
+            # LlamaParse usually separates significant sections with #
+            if line.startswith("# ") and ("Attachment" in line or "Table" in line or "Sheet" in line):
+                end_index = i
+                print(f"DEBUG: Found End of Sheet Section at line {i}: {line}")
+                break
+        
+        # SLICE the context to only this sheet
+        sheet_lines = lines[start_index:end_index]
+        print(f"DEBUG: Analyzing {len(sheet_lines)} lines for sheet '{sheet_name}'")
 
         # 3. Find ALL Tables in this section
         tables = []
         
-        current_idx = start_index
-        while current_idx < len(lines):
+        current_idx = 0 # Relative to sheet_lines
+        while current_idx < len(sheet_lines):
             # Find next table header
             header_row_index = -1
-            for i in range(current_idx, len(lines)):
-                if lines[i].startswith("# ") and i > start_index + 50: 
-                    # Stop if we hit a new major section (heuristic)
-                    # This prevents reading the WHOLE file if sheets are sequential.
-                    # But lets be safe and just read until we find no more tables or explicitly stop?
-                    pass
-                
-                if "Well ID" in lines[i] and "|" in lines[i]:
+            for i in range(current_idx, len(sheet_lines)):
+                if "Well ID" in sheet_lines[i] and "|" in sheet_lines[i]:
                     header_row_index = i
                     break
             
@@ -97,9 +94,9 @@ class SheetAgent:
                 break # No more tables
             
             # --- Extract Table ---
-            print(f"Found Table Header at row {header_row_index}")
+            # print(f"Found Table Header at relative row {header_row_index}")
             
-            header_line = lines[header_row_index].strip()
+            header_line = sheet_lines[header_row_index].strip()
             if header_line.startswith('|'): header_line = header_line[1:]
             if header_line.endswith('|'): header_line = header_line[:-1]
             headers = [c.strip() for c in header_line.split('|')]
@@ -107,8 +104,8 @@ class SheetAgent:
             
             data = []
             last_row_idx = header_row_index
-            for i in range(header_row_index + 1, len(lines)):
-                line = lines[i].strip()
+            for i in range(header_row_index + 1, len(sheet_lines)):
+                line = sheet_lines[i].strip()
                 last_row_idx = i
                 
                 # Stop if new Section 
