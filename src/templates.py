@@ -52,7 +52,7 @@ def get_colormap_info(cmap_name):
              
     return low_hex, mid_hex, high_hex, high_desc, low_desc
 
-def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=None, legend_label="Elevation", colormap="viridis", project_details=None, logo_base64=None):
+def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=None, legend_label="Elevation", colormap="viridis", project_details=None):
     """
     Injects JavaScript into HTML. Now supports dynamic legend label.
     """
@@ -355,12 +355,18 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
 </div>
 """
 
-    # Logic for Logo HTML (Pre-calc)
+    # Load static logo from assets directory
+    import base64
+    import os
+    
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'logo.png')
     logo_html_str = ""
-    if logo_base64:
+    if os.path.exists(logo_path):
+        with open(logo_path, 'rb') as f:
+            logo_base64 = base64.b64encode(f.read()).decode('utf-8')
         logo_html_str = f'<img src="data:image/png;base64,{logo_base64}" class="logo-img" alt="Project Logo">'
     else:
-        # Default placeholder or empty
+        # Placeholder if logo file not found
         logo_html_str = '<div style="text-align:center; color:#ccc;"><div style="font-size:12px;">(Logo Space)</div></div>'
 
     footer_html = f'''
