@@ -640,7 +640,7 @@ def get_colormap_info(cmap_name):
     return low_hex, mid_hex, high_hex, high_desc, low_desc
     
 
-def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=None, legend_label="Elevation", colormap="viridis", project_details=None):
+def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=None, legend_label="Elevation", colormap="viridis", project_details=None, logo_base64=None):
     """
     Injects JavaScript into HTML. Now supports dynamic legend label.
     """
@@ -736,54 +736,74 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     margin: 0;
 }}
 
-.footer-container {{
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-}}
-
-.footer-top {{
-    padding: 5px 10px;
-    border-bottom: 2px solid #333;
-    font-weight: bold;
-    font-size: 14px;
-}}
-
-.footer-main {{
-    display: flex;
+.footer-container {
+    display: grid;
+    /* Grid Columns: Notes | Logo | Details */
+    grid-template-columns: 2fr 1.2fr 2fr;
     width: 100%;
     height: 120px; /* Fixed height for consistency */
-}}
+}
 
-.footer-notes {{
-    flex: 1;
-    padding: 10px;
+.footer-cell {
     border-right: 2px solid #333;
-    font-size: 12px;
-}}
+    padding: 5px;
+    box-sizing: border-box;
+    overflow: hidden;
+    position: relative;
+}
 
-.footer-details {{
-    flex: 1;
-    display: grid;
-    grid-template-columns: 100px 1fr;
-    grid-gap: 4px;
-    padding: 10px;
+.footer-cell:last-child {
+    border-right: none;
+}
+
+/* CELL 1: NOTES */
+.cell-notes {
     font-size: 11px;
-    align-content: start;
-}}
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+}
 
-.footer-label {{
+/* CELL 2: LOGO */
+.cell-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    padding: 2px;
+}
+
+.logo-img {
+    max-width: 95%;
+    max-height: 90%;
+    object-fit: contain;
+}
+
+/* CELL 3: DETAILS */
+.cell-details {
+    display: grid;
+    grid-template-columns: 85px 1fr; /* Label Value */
+    grid-gap: 2px;
+    font-size: 10px;
+    align-content: start;
+    padding: 6px;
+}
+
+.footer-label {
     font-weight: bold;
     text-align: right;
     padding-right: 5px;
-}}
+}
 
-.footer-value {{
+.footer-value {
     text-align: left;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}}
+}
+
+/* Revision box style at bottom of details? Or just list items. */
+
 </style>
 
 <!-- html-to-image for snapshot -->
@@ -888,57 +908,248 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
   </div>
 </div>
 
-<!-- Hidden Footer Template -->
+    # Logic for Logo HTML (Pre-calc)
+    logo_html_str = ""
+    if logo_base64:
+        logo_html_str = f'<img src="data:image/png;base64,{logo_base64}" class="logo-img" alt="Project Logo">'
+    else:
+        # Default placeholder or empty
+        logo_html_str = \"\"\"
+        <div style="text-align:center; color:#ccc;">
+            <div style="font-size:12px;">(Logo Space)</div>
+        </div>
+        \"\"\"
+
+    js_code = f"""
+<!-- Force Hide Leaflet Controls -->
+<style>
+/* ... (Leaflet styles same as before) ... */
 <div id="snapshot-footer">
     <div class="footer-container">
-        <div class="footer-top">
-             <span id="footer-attachment-title">{pd_safe['attachment_title']}</span>
+        <!-- CELL 1: GENERAL NOTES -->
+        <div class="footer-cell cell-notes">
+            <div style="font-weight:bold; margin-bottom:4px; text-decoration: underline;">GENERAL NOTES:</div>
+            <div>{{pd_safe['general_notes']}}</div>
+             <div style="position: absolute; bottom: 5px; left: 8px; font-size: 10px; color: #555;">
+               SOURCE: NEARMAP {pd_safe['date']} <!-- Placeholder source -->
+            </div>
         </div>
-        <div class="footer-main">
-            <div class="footer-notes">
-                <strong>{pd_safe['general_notes']}</strong><br>
-                <br>
-                <!-- Space for notes -->
-            </div>
+        
+        
+        <!-- CELL 2: LOGO -->
+        <div class="footer-cell cell-logo">
+             {logo_html_str}
+        </div>
+        
+        <!-- CELL 3: DETAILS -->
+        <div class="footer-cell cell-details">
+            <!-- Row 1 -->
+            <div class="footer-label">Client:</div>
+            <div class="footer-value"><strong>{{pd_safe['client']}}</strong></div>
             
-            <!-- Logo Section substitute -->
-            <div style="width: 150px; border-right: 2px solid #333; display: flex; align-items: center; justify-content: center; flex-direction: column;">
-                <div style="font-size: 24px; font-weight: bold; color: #4DA6FF;">ee</div>
-                <div style="font-size: 10px; color: #4DA6FF;">edwards<br>environmental</div>
-            </div>
-
-            <div class="footer-details">
-                <!-- Client Info -->
-                <div class="footer-label">Client:</div>
-                <div class="footer-value">{pd_safe['client']}</div>
-
-                 <div class="footer-label">Project:</div>
-                <div class="footer-value">{pd_safe['project']}</div>
-                
-                <div class="footer-label">Location:</div>
-                <div class="footer-value">{pd_safe['address']}</div>
-                
-            </div>
+            <!-- Row 2 -->
+            <div class="footer-label">Project:</div>
+            <div class="footer-value">{{pd_safe['project']}}</div>
             
-            <div class="footer-details" style="border-left: 1px solid #ccc;">
-                 <div class="footer-label">Drawing Title:</div>
-                <div class="footer-value"><strong>{pd_safe['drawing_title']}</strong></div>
-
-                <div class="footer-label">Drawn:</div>
-                <div class="footer-value">{pd_safe['drawn_by']}</div>
-                
-                <div class="footer-label">Project No:</div>
-                <div class="footer-value">{pd_safe['job_no']}</div>
-                
-                 <div class="footer-label">Date:</div>
-                <div class="footer-value">{pd_safe['date']}</div>
-                
-                <div class="footer-label">Figure No:</div>
-                <div class="footer-value">1 Rev. A</div>
-            </div>
+            <!-- Row 3 -->
+            <div class="footer-label">Location:</div>
+            <div class="footer-value">{{pd_safe['address']}}</div>
+            
+            <!-- Row 4 -->
+            <div class="footer-label">Drawing Title:</div>
+            <div class="footer-value" style="font-size:11px; font-weight:bold;">{{pd_safe['drawing_title']}}</div>
+            
+             <!-- Row 5 (Split grid for Drawn/ProjectNo) -->
+             <!-- Making it simple rows for reliability -->
+            <div class="footer-label">Drawn:</div>
+            <div class="footer-value">{{pd_safe['drawn_by']}}</div>
+            
+            <div class="footer-label">Project No:</div>
+            <div class="footer-value">{{pd_safe['job_no']}}</div>
+            
+            <div class="footer-label">Date:</div>
+            <div class="footer-value">{{pd_safe['date']}}</div>
+            
+            <div class="footer-label">Figure No:</div>
+            <div class="footer-value">1 Rev. A</div>
         </div>
     </div>
 </div>
+"""
+
+    js_code = f"""
+<!-- Force Hide Leaflet Controls -->
+<style>
+/* ... (Leaflet styles same as before) ... */
+/* Hide Zoom Control */
+.leaflet-control-zoom {{
+    display: none !important;
+}}
+.leaflet-control-layers {{
+    display: none !important;
+}}
+.leaflet-control-attribution {{
+    display: none !important;
+}}
+.leaflet-draw {{
+    display: none !important;
+}}
+.borewell-label {{
+    background: #FFFFFF !important;
+    border: 1px solid #000000 !important;
+    border-radius: 0px !important;
+    padding: 1px 4px !important;
+    font-weight: bold !important;
+    font-family: Arial, sans-serif !important;
+    font-size: 11px !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+}}
+</style>
+
+<style>
+/* Footer Strip Styles (GRID) */
+#snapshot-footer {{
+    display: none; /* Hidden by default, shown during snapshot composite */
+    width: 100%;
+    background: white;
+    border-top: 2px solid #333;
+    font-family: Arial, sans-serif;
+    color: #333;
+    box-sizing: border-box;
+    padding: 0;
+    margin: 0;
+    border-left: 2px solid #333; /* Outer Frame */
+    border-right: 2px solid #333;
+    border-bottom: 2px solid #333;
+}}
+
+.footer-container {{
+    display: grid;
+    /* Grid Columns: Notes (2fr) | Logo (1.2fr) | Details (2fr) */
+    grid-template-columns: 2fr 1.2fr 2fr;
+    width: 100%;
+    height: 125px; /* Fixed height matches typical title block */
+}}
+
+.footer-cell {{
+    border-right: 2px solid #333;
+    padding: 5px;
+    box-sizing: border-box;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}}
+
+.footer-cell:last-child {{
+    border-right: none;
+}}
+
+/* CELL 1: NOTES */
+.cell-notes {{
+    font-size: 10px;
+    padding: 8px;
+    line-height: 1.3;
+}}
+
+/* CELL 2: LOGO */
+.cell-logo {{
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+}}
+
+.logo-img {{
+    max-width: 98%;
+    max-height: 95%;
+    object-fit: contain;
+}}
+
+/* CELL 3: DETAILS */
+.cell-details {{
+    display: grid;
+    grid-template-columns: 80px 1fr; /* Label Value */
+    grid-gap: 2px 8px; /* row-gap col-gap */
+    font-size: 10px;
+    align-content: start;
+    padding: 6px 10px;
+}}
+
+.footer-label {{
+    font-weight: bold;
+    text-align: right;
+}}
+
+.footer-value {{
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: 'Arial Narrow', Arial, sans-serif;
+}}
+</style>
+
+<!-- html-to-image for snapshot -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.js"></script>
+
+<!-- ... (Compass and other controls remain same) ... -->
+
+<!-- Hidden Footer Template -->
+<div id="snapshot-footer">
+    <div class="footer-container">
+        <!-- CELL 1: GENERAL NOTES -->
+        <div class="footer-cell cell-notes">
+            <div style="font-weight:bold; margin-bottom:4px; text-decoration: underline; font-size: 11px;">GENERAL NOTES:</div>
+            <div style="white-space: pre-wrap;">{{pd_safe['general_notes']}}</div>
+            
+             <div style="margin-top: auto; font-weight: bold; font-size: 11px;">
+               SOURCE: NEARMAP {{pd_safe['date']}}
+            </div>
+        </div>
+        
+        <!-- CELL 2: LOGO -->
+        <div class="footer-cell cell-logo">
+             {logo_html_str}
+        </div>
+        
+        <!-- CELL 3: DETAILS -->
+        <div class="footer-cell cell-details">
+            <!-- Row 1 -->
+            <div class="footer-label">Client:</div>
+            <div class="footer-value" style="font-weight:bold;">{{pd_safe['client']}}</div>
+            
+            <!-- Row 2 -->
+            <div class="footer-label">Project:</div>
+            <div class="footer-value">{{pd_safe['project']}}</div>
+            
+            <!-- Row 3 -->
+            <div class="footer-label">Location:</div>
+            <div class="footer-value">{{pd_safe['address']}}</div>
+            
+            <!-- Row 4 -->
+            <div class="footer-label">Drawing Title:</div>
+            <div class="footer-value" style="font-size:12px; font-weight:bold;">{{pd_safe['drawing_title']}}</div>
+            
+            <!-- Row 5 -->
+            <div class="footer-label">Drawn:</div>
+            <div class="footer-value">{{pd_safe['drawn_by']}}</div>
+            
+            <!-- Row 6 -->
+            <div class="footer-label">Project No:</div>
+            <div class="footer-value">{{pd_safe['job_no']}}</div>
+            
+            <!-- Row 7 -->
+            <div class="footer-label">Date:</div>
+            <div class="footer-value">{{pd_safe['date']}}</div>
+            
+            <!-- Row 8 -->
+            <div class="footer-label">Figure No:</div>
+            <div class="footer-value" style="font-weight:bold;">1 Rev. A</div>
+        </div>
+    </div>
+</div>
+
 
 <!-- Optional: Input for Attachment Title in Controls -->
 <div id="footer-controls" style="position: absolute; top: 350px; right: 10px; z-index: 9999; background: rgba(255,255,255,0.9); padding: 5px; border-radius: 4px; font-size: 11px; width: 200px;">

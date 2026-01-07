@@ -33,7 +33,9 @@ with st.sidebar:
         api_key = st.text_input("Llama Cloud API Key", type="password")
     
     excel_file = st.file_uploader("Upload Excel File (.xlsx)", type=["xlsx", "xls"])
+    excel_file = st.file_uploader("Upload Excel File (.xlsx)", type=["xlsx", "xls"])
     kmz_file = st.file_uploader("Upload KMZ File (.kmz)", type=["kmz", "zip"], help="On mobile, use .zip")
+    logo_file = st.file_uploader("Upload Project Logo (Optional)", type=["png", "jpg", "jpeg"])
     
     st.header("2. AI Processing")
     if excel_file and api_key:
@@ -171,7 +173,13 @@ if st.session_state['processed_data'] is not None:
                     "job_no": "#773-01"
                 }
                 
-                utils.inject_controls_to_html(OUTPUT_MAP_PATH_UNIQUE, image_bounds, target_points, kmz_points, legend_label=selected_param, colormap=selected_cmap, project_details=project_details)
+                # Logo Processing
+                logo_base64 = None
+                if logo_file:
+                    import base64
+                    logo_base64 = base64.b64encode(logo_file.getvalue()).decode('utf-8')
+                
+                utils.inject_controls_to_html(OUTPUT_MAP_PATH_UNIQUE, image_bounds, target_points, kmz_points, legend_label=selected_param, colormap=selected_cmap, project_details=project_details, logo_base64=logo_base64)
                 
                 # Render
                 with open(OUTPUT_MAP_PATH_UNIQUE, 'r', encoding='utf-8') as f:
