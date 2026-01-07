@@ -295,9 +295,17 @@ class SheetAgent:
         # We need a single 'Easting' and 'Northing' (or Lat/Lon) for the map to work.
         print("Coalescing Coordinates...")
 
-        def coalesce_columns(df, target_base_name):
-            # Find all columns that match the base name (e.g., "Easting (Sheet1)")
-            candidates = [c for c in df.columns if c.startswith(target_base_name) and "(" in c]
+        def coalesce_columns(df, target_base_names):
+            if isinstance(target_base_names, str):
+                target_base_names = [target_base_names]
+            
+            candidates = []
+            for base in target_base_names:
+                # Find columns starting with base (and optionally having '(', though suffixing ensures this)
+                # We check for "(" to ensure we are looking at the suffixed versions we created.
+                found = [c for c in df.columns if c.startswith(base) and "(" in c]
+                candidates.extend(found)
+            
             if not candidates:
                 return None
             
@@ -309,7 +317,8 @@ class SheetAgent:
             return combined
 
         # Attempt to create master Coordinate columns
-        easting = coalesce_columns(final_df, "Easting")
+        # Support "Eassting" typo in detection
+        easting = coalesce_columns(final_df, ["Easting", "Eassting"])
         northing = coalesce_columns(final_df, "Northing")
         
         if easting is not None: final_df['Easting'] = easting
