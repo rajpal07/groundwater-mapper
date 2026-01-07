@@ -21,6 +21,9 @@ st.markdown("""
 Upload your Excel data and KMZ file to generate an interactive groundwater contour map.
 """)
 
+st.page_link("pages/Smart_Excel_Tool.py", label="Go to Smart Excel Tool", icon="📊", use_container_width=True)
+
+
 # Output path
 OUTPUT_MAP_PATH = "generated_map.html"
 
