@@ -100,7 +100,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     image_bounds_json = json.dumps(image_bounds)
     initial_center_json = json.dumps(initial_center)
 
-    js_code = f"""
+    controls_html = f"""
 <!-- Force Hide Leaflet Controls -->
 <style>
 /* Hide Zoom Control */
@@ -502,7 +502,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
 <!-- html-to-image for snapshot -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.js"></script>
 
-<!-- ... (Compass and other controls remain same) ... -->
+{controls_html}
 
 <!-- Hidden Footer Template -->
 <div id="snapshot-footer">
