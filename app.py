@@ -47,17 +47,24 @@ with st.sidebar:
     
     st.header("2. AI Processing")
     if excel_file and api_key:
+        
+        # Checking for file change to reset state
+        if st.session_state['processed_source'] != excel_file.name:
+            if st.session_state['processed_data'] is not None:
+                st.info("New file detected. Resetting previous data.")
+                st.session_state['processed_data'] = None
+                st.session_state['current_job_id'] = None
+                st.rerun()
+
         # Pre-process: Detect Sheets
         try:
-            # Check sheet names immediately (fast)
+            excel_file.seek(0) # IMPORTANT: Reset cursor before reading
             xls = pd.ExcelFile(excel_file)
             sheet_names = xls.sheet_names
             
             selected_sheets = []
             if len(sheet_names) > 1:
                 st.info(f"Detected {len(sheet_names)} sheets.")
-                # Default: Select all? Or none? User said "user selects which sheet".
-                # Let's select all by default so they can just click "Process" if lazy.
                 selected_sheets = st.multiselect("Select Sheets to Process", sheet_names, default=sheet_names)
             else:
                 # One sheet: Auto select without UI
@@ -75,10 +82,7 @@ with st.sidebar:
                             os.makedirs(job_dir, exist_ok=True)
                             
                             # Save temp file for Agent
-                            # Note: excel_file is a stream, we need to reset it or re-read buffer if we used pd.ExcelFile? 
-                            # pd.ExcelFile reads header, but doesn't consume stream destructively typically if bytes passed?
-                            # Streamlit file uploader buffer stays valid.
-                            
+                            excel_file.seek(0) # Reset again before saving
                             input_path = os.path.join(job_dir, "original.xlsx")
                             with open(input_path, "wb") as f:
                                 f.write(excel_file.getbuffer())
@@ -97,6 +101,7 @@ with st.sidebar:
                                 st.session_state['processed_source'] = excel_file.name
                                 st.session_state['current_job_id'] = job_id
                                 st.success(f"Processed {len(df)} rows from sheets: {selected_sheets}")
+                                st.rerun() # Force refresh to show map settings
                             else:
                                 st.error("Agent failed to extract data.")
                                 
