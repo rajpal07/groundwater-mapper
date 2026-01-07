@@ -222,7 +222,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.js"></script>
 
 <!-- Compass UI - Realistic and Draggable -->
-<div id="compass" style="position:absolute; top:80px; left:10px; z-index:100000 !important; width:80px; height:80px; cursor:move; touch-action: none; -webkit-user-select: none; user-select: none;" title="Drag to reposition | Click to reset rotation">
+<div id="compass" style="position:fixed; top:80px; left:10px; z-index:100000 !important; width:80px; height:80px; cursor:move; touch-action: none; -webkit-user-select: none; user-select: none;" title="Drag to reposition | Click to reset rotation">
     <div id="compassInner" style="position:relative; width:100%; height:100%; background:radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(240,240,240,0.95) 100%); border-radius:50%; border:4px solid #2c3e50; transition: transform 0.3s ease;">
         <!-- Outer ring with degree marks -->
         <div style="position:absolute; top:50%; left:50%; width:90%; height:90%; transform:translate(-50%, -50%);">
@@ -255,7 +255,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
 </div>
 
 <!-- Controls UI -->
-<div id="map-controls" style="position:absolute; top:10px; right:10px; z-index:100000; background:rgba(255,255,255,0.95); padding:10px; border-radius:6px; font-family:Arial,Helvetica,sans-serif; pointer-events:auto;">
+<div id="map-controls" style="position:fixed; top:10px; right:10px; z-index:100000 !important; background:rgba(255,255,255,0.95); padding:10px; border-radius:6px; font-family:Arial,Helvetica,sans-serif; pointer-events:auto;">
   <div style="margin-bottom:8px;">
     <label>Move Scale: </label>
     <input type="number" id="moveScale" value="0.01" step="0.01" min="0.01" style="width:60px;">
@@ -290,7 +290,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
 </div>
 
 <!-- Legend -->
-<div id="map-legend" style="position:absolute; bottom:10px; right:10px; z-index:100000 !important; background:rgba(255,255,255,0.95); padding:10px; border-radius:6px; font-family:Arial,Helvetica,sans-serif; font-size:12px; box-shadow:0 0 5px rgba(0,0,0,0.2); cursor:move;">
+<div id="map-legend" style="position:fixed; bottom:10px; right:10px; z-index:100000 !important; background:rgba(255,255,255,0.95); padding:10px; border-radius:6px; font-family:Arial,Helvetica,sans-serif; font-size:12px; box-shadow:0 0 5px rgba(0,0,0,0.2); cursor:move;">
   <div style="font-weight:bold; margin-bottom:8px; border-bottom:1px solid #ddd; padding-bottom:4px;">Legend</div>
   
   <!-- Points -->
