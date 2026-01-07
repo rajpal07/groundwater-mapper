@@ -368,16 +368,30 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     # Add a small amount of noise to coordinates to prevent singular matrix if points are duplicate/collinear
     # (Optional but robust)
     
+    # Interpolation Strategy:
+    # 1. Use RBF for smooth internal interpolation (or Linear as fallback).
+    # 2. STRICTLY MASK to the Convex Hull of the data points to avoid misleading extrapolation.
+    #    (Groundwater data should not be inferred far beyond monitoring wells).
+    
+    # Create a mask using 'linear' interpolation which intrinsically returns NaNs outside the convex hull
+    mask_z = griddata((df[x_col], df[y_col]), df[target_col], (grid_x, grid_y), method='linear')
+    is_outside_hull = np.isnan(mask_z)
+
     try:
+        # Try RBF for smoothness
+        from scipy.interpolate import Rbf
+        # 'linear' radial basis function is good for groundwater
         rbf = Rbf(df[x_col], df[y_col], df[target_col], function='linear')
         grid_z = rbf(grid_x, grid_y)
+        
+        # Apply Hull Mask
+        grid_z[is_outside_hull] = np.nan
+        
     except Exception as e:
-        print(f"RBF Interpolation failed: {e}. Fallback to linear with nearest fill.")
-        # Fallback: Linear then Nearest to fill NaNs
-        grid_z = griddata((df[x_col], df[y_col]), df[target_col], (grid_x, grid_y), method='linear')
-        mask = np.isnan(grid_z)
-        if mask.any():
-            grid_z[mask] = griddata((df[x_col], df[y_col]), df[target_col], (grid_x[mask], grid_y[mask]), method='nearest')
+        print(f"RBF Interpolation failed: {e}. Fallback to linear.")
+        # Linear already computed as mask_z (valid info inside hull)
+        grid_z = mask_z
+        # No 'nearest' fill anymore - we WANT NaNs outside.
 
     # Generate Contour Image
     z_min, z_max = df[target_col].min(), df[target_col].max()
