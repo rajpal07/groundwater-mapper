@@ -36,27 +36,22 @@ class SheetAgent:
         """
         Generic extractor for ANY sheet.
         Scans the markdown text looking for the specific sheet section.
-        Then finds the table within it.
+        Then finds ALL tables within it that have 'Well ID'.
+        Merges them horizontally.
         """
         print(f"--- Extracting Sheet: {sheet_name} ---")
         lines = markdown_text.split('\n')
         
         # 1. Find Start of Sheet
         start_index = -1
-        
-        # Normalize for search (LlamaParse might produce "Sheet Name" or "SheetName")
         sheet_search = sheet_name.replace('_', ' ').strip()
         
-        # Scan for Sheet Header
-        # Looking for things like "## <SheetName>" or "### <SheetName>"
-        # or even just text that matches strongly.
         for i, line in enumerate(lines):
             if line.strip().startswith("#") and sheet_search.lower() in line.lower():
                 start_index = i
-                print(f"DEBUG: Found Sheet Header for '{sheet_name}' at line {i}: {line[:50]}...")
+                print(f"DEBUG: Found Sheet Header for '{sheet_name}' at line {i}")
                 break
         
-        # Fallback: If strict header search fails, look for simple text match if the sheet name is unique/long enough
         if start_index == -1 and len(sheet_search) > 5:
              for i, line in enumerate(lines):
                 if sheet_search.lower() in line.lower() and (line.startswith("#") or line.startswith("**")):
@@ -64,87 +59,108 @@ class SheetAgent:
                     print(f"DEBUG: Found Loose Sheet Header for '{sheet_name}' at line {i}")
                     break
         
-        # If still -1, and we are looking for a SPECIFIC sheet, maybe we just scan the whole file?
-        # But that risks pulling data from other sheets. 
-        # However, if the Excel file is simple, maybe it's fine.
         if start_index == -1:
             print(f"Warning: Specific header for '{sheet_name}' not found. scanning from top.")
             start_index = 0
             
-        # 2. Find Table Header (Well ID)
-        header_row_index = -1
-        
-        # Look for "Well ID"
-        # We limit the search distance if we found a header to avoid bleeding into next sheet
+        # 2. Find End of Sheet (next header)
+        # We limit the search distance to avoid bleeding
         search_limit = len(lines)
-        if start_index > 0:
-            # Try to find the NEXT sheet header to stop searching?
-            # Hard to guess.
-            pass
-
-        for i in range(start_index, search_limit):
-            line = lines[i]
-            # Check for generic table header
-            if "Well ID" in line and "|" in line:
-                header_row_index = i
-                break
-            # Also check if we hit another header which might mean we missed it
-            if i > start_index + 100 and line.startswith("# "): 
-                # Safety break? No, tables can be long.
+        for i in range(start_index + 1, len(lines)):
+            if lines[i].startswith("# ") or lines[i].startswith("## "):
+                # If we encounter a new major header, assume end of current sheet section
+                # But be careful not to stop on a sub-header like "Table 1"
+                # Heuristic: If it looks like a Sheet Name we might stop.
+                # For now, let's just use the whole file if uncertain, but ideally we stop.
+                # Let's assume strict sheet boundaries are hard to define blindly.
                 pass
+
+        # 3. Find ALL Tables in this section
+        tables = []
+        
+        current_idx = start_index
+        while current_idx < len(lines):
+            # Find next table header
+            header_row_index = -1
+            for i in range(current_idx, len(lines)):
+                if lines[i].startswith("# ") and i > start_index + 50: 
+                    # Stop if we hit a new major section (heuristic)
+                    # This prevents reading the WHOLE file if sheets are sequential.
+                    # But lets be safe and just read until we find no more tables or explicitly stop?
+                    pass
                 
-        if header_row_index == -1:
-             print(f"Skipping Sheet '{sheet_name}': No 'Well ID' header found.")
-             return pd.DataFrame()
-             
-        print(f"Found Table Header at row {header_row_index}")
-        
-        # 3. Parse Header
-        header_line = lines[header_row_index].strip()
-        if header_line.startswith('|'): header_line = header_line[1:]
-        if header_line.endswith('|'): header_line = header_line[:-1]
-        
-        headers = [c.strip() for c in header_line.split('|')]
-        # Filter empty
-        headers = [h for h in headers if h] 
-        
-        # 4. Extract Rows
-        data = []
-        for i in range(header_row_index + 1, len(lines)):
-            line = lines[i].strip()
+                if "Well ID" in lines[i] and "|" in lines[i]:
+                    header_row_index = i
+                    break
             
-            # Stop if new Section 
-            if line.startswith("#") and i > header_row_index + 2:
-                break
-     
-            if not line.startswith("|"): continue
-            if "---" in line: continue
+            if header_row_index == -1:
+                break # No more tables
             
-            clean_line = line
-            if clean_line.startswith('|'): clean_line = clean_line[1:]
-            if clean_line.endswith('|'): clean_line = clean_line[:-1]
+            # --- Extract Table ---
+            print(f"Found Table Header at row {header_row_index}")
             
-            cells = [c.strip() for c in clean_line.split('|')]
+            header_line = lines[header_row_index].strip()
+            if header_line.startswith('|'): header_line = header_line[1:]
+            if header_line.endswith('|'): header_line = header_line[:-1]
+            headers = [c.strip() for c in header_line.split('|')]
+            headers = [h for h in headers if h] 
             
-            # Align
-            if len(cells) > len(headers):
-                 cells = cells[:len(headers)]
-            elif len(cells) < len(headers):
-                 cells += [''] * (len(headers) - len(cells))
-                 
-            row_dict = {}
-            has_data = False
-            for h, c in zip(headers, cells):
-                row_dict[h] = c
-                if c: has_data = True
+            data = []
+            last_row_idx = header_row_index
+            for i in range(header_row_index + 1, len(lines)):
+                line = lines[i].strip()
+                last_row_idx = i
                 
-            if has_data and row_dict.get(headers[0]): # Check first col (Well ID)
-                 val = row_dict[headers[0]]
-                 if val in ['Units', 'LOR', 'Guideline', 'None', '']: continue
-                 data.append(row_dict)
-                 
-        df = pd.DataFrame(data)
-        return df
+                # Stop if new Section 
+                if line.startswith("#"): break
+                if not line.startswith("|") and len(line) > 5: break # End of table text?
+                
+                if not line.startswith("|"): continue
+                if "---" in line: continue
+                
+                clean_line = line
+                if clean_line.startswith('|'): clean_line = clean_line[1:]
+                if clean_line.endswith('|'): clean_line = clean_line[:-1]
+                cells = [c.strip() for c in clean_line.split('|')]
+                
+                if len(cells) > len(headers): cells = cells[:len(headers)]
+                elif len(cells) < len(headers): cells += [''] * (len(headers) - len(cells))
+                
+                row_dict = {}
+                has_data = False
+                for h, c in zip(headers, cells):
+                    row_dict[h] = c
+                    if c: has_data = True
+                
+                if has_data and row_dict.get(headers[0]):
+                     val = str(row_dict[headers[0]])
+                     if val in ['Units', 'LOR', 'Guideline', 'None', '', 'nan']: continue
+                     data.append(row_dict)
+            
+            if data:
+                df_table = pd.DataFrame(data)
+                tables.append(df_table)
+            
+            # Move search forward
+            current_idx = last_row_idx + 1
+            
+        # 4. Merge Tables
+        if not tables:
+            return pd.DataFrame()
+            
+        final_sheet_df = tables[0]
+        for df in tables[1:]:
+            # Clean keys
+            if 'Well ID' in final_sheet_df.columns: final_sheet_df['Well ID'] = final_sheet_df['Well ID'].astype(str).str.strip()
+            if 'Well ID' in df.columns: df['Well ID'] = df['Well ID'].astype(str).str.strip()
+            
+            # Merge
+            # Suffix columns to avoid collision within same sheet?
+            # Or just update? Usually different tables have different columns.
+            # If duplicates, suffix.
+            final_sheet_df = pd.merge(final_sheet_df, df, on='Well ID', how='outer', suffixes=('', '_dup'))
+            
+        return final_sheet_df
 
     def clean_sheet_data(self, df):
         """
