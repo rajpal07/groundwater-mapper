@@ -1,5 +1,8 @@
 import streamlit as st
-import utils
+import src.geo as geo
+import src.data as data
+import src.visualization as viz
+import src.templates as templates
 import os
 import pandas as pd
 from src.sheet_agent import SheetAgent
@@ -32,7 +35,6 @@ with st.sidebar:
     else:
         api_key = st.text_input("Llama Cloud API Key", type="password")
     
-    excel_file = st.file_uploader("Upload Excel File (.xlsx)", type=["xlsx", "xls"])
     excel_file = st.file_uploader("Upload Excel File (.xlsx)", type=["xlsx", "xls"])
     kmz_file = st.file_uploader("Upload KMZ File (.kmz)", type=["kmz", "zip"], help="On mobile, use .zip")
     logo_file = st.file_uploader("Upload Project Logo (Optional)", type=["png", "jpg", "jpeg"])
@@ -125,7 +127,7 @@ if st.session_state['processed_data'] is not None:
                 kmz_points = None
                 if kmz_file:
                     try:
-                        kmz_points = utils.extract_kmz_points(kmz_file)
+                        kmz_points = geo.extract_kmz_points(kmz_file)
                         st.write(f"✅ KMZ processed: {len(kmz_points)} ref points")
                     except Exception as e:
                         st.warning(f"KMZ Error: {e}")
@@ -135,7 +137,7 @@ if st.session_state['processed_data'] is not None:
                 # OPTIMIZATION: Only generate contours for Groundwater/Elevation
                 should_generate_contours = any(x in selected_param for x in ["Water Level", "Elevation", "SWL", "mAHD"])
                 
-                image_base64, image_bounds, target_points, bbox_geojson = utils.process_excel_data(
+                image_base64, image_bounds, target_points, bbox_geojson = data.process_excel_data(
                     df, 
                     reference_points=kmz_points,
                     value_column=selected_param,
@@ -144,7 +146,7 @@ if st.session_state['processed_data'] is not None:
                 )
                 
                 # 3. Create Map
-                m = utils.create_map(
+                m = viz.create_map(
                     image_base64, 
                     image_bounds, 
                     target_points, 
@@ -179,7 +181,7 @@ if st.session_state['processed_data'] is not None:
                     import base64
                     logo_base64 = base64.b64encode(logo_file.getvalue()).decode('utf-8')
                 
-                utils.inject_controls_to_html(OUTPUT_MAP_PATH_UNIQUE, image_bounds, target_points, kmz_points, legend_label=selected_param, colormap=selected_cmap, project_details=project_details, logo_base64=logo_base64)
+                templates.inject_controls_to_html(OUTPUT_MAP_PATH_UNIQUE, image_bounds, target_points, kmz_points, legend_label=selected_param, colormap=selected_cmap, project_details=project_details, logo_base64=logo_base64)
                 
                 # Render
                 with open(OUTPUT_MAP_PATH_UNIQUE, 'r', encoding='utf-8') as f:
