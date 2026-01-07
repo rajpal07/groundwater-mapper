@@ -51,6 +51,14 @@ with st.sidebar:
         st.warning("Please provide Llama Cloud API Key in Sidebar or Secrets.")
 
 # --- Main Layout Logic ---
+# Check if file was removed (user clicked the cross button)
+if not excel_file and st.session_state['processed_data'] is not None:
+    st.session_state['processed_data'] = None
+    st.session_state['current_job_id'] = None
+    st.session_state['success_msg'] = None
+    st.session_state['processed_source'] = None
+    st.rerun()
+
 if excel_file and api_key:
     st.header("2. AI Processing")
     
@@ -61,6 +69,7 @@ if excel_file and api_key:
             st.session_state['processed_data'] = None
             st.session_state['current_job_id'] = None
             st.session_state['success_msg'] = None
+            st.session_state['processed_source'] = None
             st.rerun()
 
     # Pre-process: Detect Sheets
