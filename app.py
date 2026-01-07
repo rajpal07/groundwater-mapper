@@ -32,6 +32,7 @@ if 'processed_source' not in st.session_state:
 if 'current_job_id' not in st.session_state:
     st.session_state['current_job_id'] = None
 
+# --- Sidebar Definition ---
 with st.sidebar:
     st.header("1. Data Upload")
     # API Key Handling
@@ -45,76 +46,91 @@ with st.sidebar:
     kmz_file = st.file_uploader("Upload KMZ File (.kmz)", type=["kmz", "zip"], help="On mobile, use .zip")
     logo_file = st.file_uploader("Upload Project Logo (Optional)", type=["png", "jpg", "jpeg"])
     
-    st.header("2. AI Processing")
-    if excel_file and api_key:
-        
-        # Checking for file change to reset state
-        if st.session_state['processed_source'] != excel_file.name:
-            if st.session_state['processed_data'] is not None:
-                st.info("New file detected. Resetting previous data.")
-                st.session_state['processed_data'] = None
-                st.session_state['current_job_id'] = None
-                st.rerun()
-
-        # Pre-process: Detect Sheets
-        try:
-            excel_file.seek(0) # IMPORTANT: Reset cursor before reading
-            xls = pd.ExcelFile(excel_file)
-            sheet_names = xls.sheet_names
-            
-            selected_sheets = []
-            if len(sheet_names) > 1:
-                st.info(f"Detected {len(sheet_names)} sheets.")
-                selected_sheets = st.multiselect("Select Sheets to Process", sheet_names, default=sheet_names)
-            else:
-                # One sheet: Auto select without UI
-                selected_sheets = sheet_names
-            
-            if st.button("Process with AI Agent", type="primary"):
-                if not selected_sheets:
-                    st.warning("Please select at least one sheet.")
-                else:
-                    with st.spinner("AI Agent is reading the Excel file..."):
-                        try:
-                            # Generic unique Job ID
-                            job_id = str(uuid.uuid4())
-                            job_dir = os.path.join("runs", job_id)
-                            os.makedirs(job_dir, exist_ok=True)
-                            
-                            # Save temp file for Agent
-                            excel_file.seek(0) # Reset again before saving
-                            input_path = os.path.join(job_dir, "original.xlsx")
-                            with open(input_path, "wb") as f:
-                                f.write(excel_file.getbuffer())
-                            
-                            # Run Agent
-                            agent = SheetAgent(api_key=api_key)
-                            output_path = os.path.join(job_dir, "processed.xlsx")
-                            
-                            # NEW: Pass selected_sheets
-                            result_path = agent.process(input_path, output_path=output_path, selected_sheets=selected_sheets)
-                            
-                            if result_path and os.path.exists(result_path):
-                                # Load into Session State
-                                df = pd.read_excel(result_path)
-                                st.session_state['processed_data'] = df
-                                st.session_state['processed_source'] = excel_file.name
-                                st.session_state['current_job_id'] = job_id
-                                st.success(f"Processed {len(df)} rows from sheets: {selected_sheets}")
-                                st.rerun() # Force refresh to show map settings
-                            else:
-                                st.error("Agent failed to extract data.")
-                                
-                        except Exception as e:
-                            st.error(f"AI Processing failed: {e}")
-        except Exception as e:
-            st.warning(f"Error reading Excel structure: {e}")
-            
-    elif not api_key:
+    # Validation Warning in Sidebar if Key missing
+    if not api_key:
         st.warning("Please provide Llama Cloud API Key in Sidebar or Secrets.")
+
+# --- Main Layout Logic ---
+if excel_file and api_key:
+    st.header("2. AI Processing")
+    
+    # Checking for file change to reset state
+    if st.session_state['processed_source'] != excel_file.name:
+        if st.session_state['processed_data'] is not None:
+            st.info("New file detected. Resetting previous data.")
+            st.session_state['processed_data'] = None
+            st.session_state['current_job_id'] = None
+            st.rerun()
+
+    # Pre-process: Detect Sheets
+    try:
+        excel_file.seek(0) # IMPORTANT: Reset cursor before reading
+        xls = pd.ExcelFile(excel_file)
+        sheet_names = xls.sheet_names
+        
+        selected_sheets = []
+        if len(sheet_names) > 1:
+            st.info(f"File contains {len(sheet_names)} sheets. Select which ones to analyze:")
+            selected_sheets = st.multiselect("Select Sheets", sheet_names, default=sheet_names, key="sheet_selector")
+        else:
+            # One sheet: Auto select without UI
+            selected_sheets = sheet_names
+        
+        # Button in Main Area
+        if st.button("Start AI Processing", type="primary"):
+            if not selected_sheets:
+                st.warning("Please select at least one sheet.")
+            else:
+                with st.spinner("AI Agent is reading the Excel file..."):
+                    try:
+                        # Generic unique Job ID
+                        job_id = str(uuid.uuid4())
+                        job_dir = os.path.join("runs", job_id)
+                        os.makedirs(job_dir, exist_ok=True)
+                        
+                        # Save temp file for Agent
+                        excel_file.seek(0) # Reset again before saving
+                        input_path = os.path.join(job_dir, "original.xlsx")
+                        with open(input_path, "wb") as f:
+                            f.write(excel_file.getbuffer())
+                        
+                        # Run Agent
+                        agent = SheetAgent(api_key=api_key)
+                        output_path = os.path.join(job_dir, "processed.xlsx")
+                        
+                        # NEW: Pass selected_sheets
+                        result_path = agent.process(input_path, output_path=output_path, selected_sheets=selected_sheets)
+                        
+                        if result_path and os.path.exists(result_path):
+                            # Load into Session State
+                            df = pd.read_excel(result_path)
+                            st.session_state['processed_data'] = df
+                            st.session_state['processed_source'] = excel_file.name
+                            st.session_state['current_job_id'] = job_id
+                            st.session_state['success_msg'] = f"Processed {len(df)} rows from sheets: {selected_sheets}"
+                            st.rerun() # Force refresh to show map settings
+                        else:
+                            st.error("Agent failed to extract data.")
+                            
+                    except Exception as e:
+                        st.error(f"AI Processing failed: {e}")
+    except Exception as e:
+        st.warning(f"Error reading Excel structure: {e}")
+
+elif not api_key:
+    st.info("👈 Please provide API Key to start.")
+elif not excel_file:
+    st.info("👈 Please upload an Excel file to start.")
 
 if st.session_state['processed_data'] is not None:
     df = st.session_state['processed_data']
+    
+    # Show Success Message if just processed
+    if 'success_msg' in st.session_state and st.session_state['success_msg']:
+        st.success(st.session_state['success_msg'])
+        # Clear it so it doesn't stay forever (actually, maybe keep it?)
+        # Let's keep it until new file upload clears session state.
+
     
     # --- HOTFIX: Force clean columns to prevent cached bad data ---
     # remove \ and * just in case old session state data is used

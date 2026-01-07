@@ -276,24 +276,35 @@ class SheetAgent:
             return None
             
         # Coalesce Coordinates for Map
-        # We look for ANY "Easting *" and "Northing *" column
+        # We need a single 'Easting' and 'Northing' (or Lat/Lon) for the map to work.
         print("Coalescing Coordinates...")
+
+        def coalesce_columns(df, target_base_name):
+            # Find all columns that match the base name (e.g., "Easting (Sheet1)")
+            candidates = [c for c in df.columns if c.startswith(target_base_name) and "(" in c]
+            if not candidates:
+                return None
+            
+            # Start with the first one
+            combined = df[candidates[0]]
+            for c in candidates[1:]:
+                # Fill NAs in 'combined' with values from 'c'
+                combined = combined.combine_first(df[c])
+            return combined
+
+        # Attempt to create master Coordinate columns
+        easting = coalesce_columns(final_df, "Easting")
+        northing = coalesce_columns(final_df, "Northing")
         
-        easting_cols = [c for c in final_df.columns if "Easting" in c]
-        northing_cols = [c for c in final_df.columns if "Northing" in c]
+        if easting is not None: final_df['Easting'] = easting
+        if northing is not None: final_df['Northing'] = northing
         
-        # Use bfill to get the first available coordinate
-        if easting_cols:
-             final_df['Easting'] = final_df[easting_cols].bfill(axis=1).iloc[:, 0]
-        if northing_cols:
-             final_df['Northing'] = final_df[northing_cols].bfill(axis=1).iloc[:, 0]
-             
-        # Lat/Lon
-        lat_cols = [c for c in final_df.columns if "Latitude" in c]
-        lon_cols = [c for c in final_df.columns if "Longitude" in c]
+        # Also do Lat/Lon just in case
+        lat = coalesce_columns(final_df, "Latitude")
+        lon = coalesce_columns(final_df, "Longitude")
         
-        if lat_cols: final_df['Latitude'] = final_df[lat_cols].bfill(axis=1).iloc[:, 0]
-        if lon_cols: final_df['Longitude'] = final_df[lon_cols].bfill(axis=1).iloc[:, 0]
+        if lat is not None: final_df['Latitude'] = lat
+        if lon is not None: final_df['Longitude'] = lon
 
         # Save
         if output_path is None: output_path = "processed_data.xlsx"
