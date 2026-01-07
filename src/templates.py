@@ -289,34 +289,68 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
   </div>
 </div>
 
-<!-- Legend -->
-<div id="map-legend" style="position:fixed; bottom:10px; right:10px; z-index:100000 !important; background:rgba(255,255,255,0.95); padding:10px; border-radius:6px; font-family:Arial,Helvetica,sans-serif; font-size:12px; box-shadow:0 0 5px rgba(0,0,0,0.2); cursor:move;">
-  <div style="font-weight:bold; margin-bottom:8px; border-bottom:1px solid #ddd; padding-bottom:4px;">Legend</div>
-  
-  <!-- Points -->
-  <div style="display:flex; align-items:center; margin-bottom:10px;">
-    <div style="width:12px; height:12px; background:#FF6B35; border-radius:50%; border:2px solid white; margin-right:8px;"></div>
-    <span>Monitoring Bore</span>
-  </div>
+<!-- Legend with Resize Handles -->
+<style>
+/* Resize handles for legend */
+.resize-handle {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.1);
+  transition: background 0.2s;
+}
+.resize-handle:hover {
+  background: rgba(0, 120, 215, 0.5);
+}
+/* Corner handles */
+.resize-nw { top: 0; left: 0; width: 10px; height: 10px; cursor: nw-resize; }
+.resize-ne { top: 0; right: 0; width: 10px; height: 10px; cursor: ne-resize; }
+.resize-sw { bottom: 0; left: 0; width: 10px; height: 10px; cursor: sw-resize; }
+.resize-se { bottom: 0; right: 0; width: 10px; height: 10px; cursor: se-resize; }
+/* Edge handles */
+.resize-n { top: 0; left: 10px; right: 10px; height: 5px; cursor: n-resize; }
+.resize-s { bottom: 0; left: 10px; right: 10px; height: 5px; cursor: s-resize; }
+.resize-w { left: 0; top: 10px; bottom: 10px; width: 5px; cursor: w-resize; }
+.resize-e { right: 0; top: 10px; bottom: 10px; width: 5px; cursor: e-resize; }
+</style>
 
-  <!-- Contour Guide -->
-  <div style="font-weight:bold; margin-bottom:6px; margin-top:8px; border-top:1px solid #ddd; padding-top:6px;">How to Read Contour</div>
+<div id="map-legend" style="position:fixed; bottom:10px; right:10px; z-index:100000 !important; background:rgba(255,255,255,0.95); padding:10px; border-radius:6px; font-family:Arial,Helvetica,sans-serif; font-size:12px; box-shadow:0 0 5px rgba(0,0,0,0.2); cursor:move; min-width:150px; min-height:100px;">
+  <!-- Resize Handles -->
+  <div class="resize-handle resize-nw"></div>
+  <div class="resize-handle resize-ne"></div>
+  <div class="resize-handle resize-sw"></div>
+  <div class="resize-handle resize-se"></div>
+  <div class="resize-handle resize-n"></div>
+  <div class="resize-handle resize-s"></div>
+  <div class="resize-handle resize-w"></div>
+  <div class="resize-handle resize-e"></div>
   
-  <!-- High Gradient -->
-  <div style="display:flex; align-items:center; margin-bottom:4px;">
-    <div style="width:20px; height:10px; background:linear-gradient(to right, {mid_hex}, {high_hex}); margin-right:8px; border:1px solid #999;"></div>
-    <span>High {legend_label_short} ({high_desc})</span>
-  </div>
-  
-  <!-- Low Gradient -->
-  <div style="display:flex; align-items:center; margin-bottom:4px;">
-    <div style="width:20px; height:10px; background:linear-gradient(to right, {low_hex}, {mid_hex}); margin-right:8px; border:1px solid #999;"></div>
-    <span>Low {legend_label_short} ({low_desc})</span>
-  </div>
-  
-  <div style="display:flex; align-items:center;">
-    <div style="font-size:16px; color:red; font-weight:bold; margin-right:8px; line-height:10px;">&rarr;</div>
-    <span>Flow Direction</span>
+  <div id="legend-content" style="width:100%; height:100%;">
+    <div style="font-weight:bold; margin-bottom:8px; border-bottom:1px solid #ddd; padding-bottom:4px;">Legend</div>
+    
+    <!-- Points -->
+    <div style="display:flex; align-items:center; margin-bottom:10px;">
+      <div style="width:12px; height:12px; background:#FF6B35; border-radius:50%; border:2px solid white; margin-right:8px;"></div>
+      <span>Monitoring Bore</span>
+    </div>
+
+    <!-- Contour Guide -->
+    <div style="font-weight:bold; margin-bottom:6px; margin-top:8px; border-top:1px solid #ddd; padding-top:6px;">How to Read Contour</div>
+    
+    <!-- High Gradient -->
+    <div style="display:flex; align-items:center; margin-bottom:4px;">
+      <div style="width:20px; height:10px; background:linear-gradient(to right, {mid_hex}, {high_hex}); margin-right:8px; border:1px solid #999;"></div>
+      <span>High {legend_label_short} ({high_desc})</span>
+    </div>
+    
+    <!-- Low Gradient -->
+    <div style="display:flex; align-items:center; margin-bottom:4px;">
+      <div style="width:20px; height:10px; background:linear-gradient(to right, {low_hex}, {mid_hex}); margin-right:8px; border:1px solid #999;"></div>
+      <span>Low {legend_label_short} ({low_desc})</span>
+    </div>
+    
+    <div style="display:flex; align-items:center;">
+      <div style="font-size:16px; color:red; font-weight:bold; margin-right:8px; line-height:10px;">&rarr;</div>
+      <span>Flow Direction</span>
+    </div>
   </div>
 </div>
 """
@@ -608,6 +642,11 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     }}
     
     function handleStart(e) {{
+      // Don't start dragging if clicking on a resize handle
+      if (e.target && e.target.classList && e.target.classList.contains('resize-handle')) {{
+        return;
+      }}
+      
       isDragging = true;
       hasMoved = false;
       
@@ -684,6 +723,156 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     document.addEventListener('touchmove', handleMove, {{ passive: false }});
     document.addEventListener('touchend', handleEnd);
     document.addEventListener('touchcancel', handleEnd);
+  }}
+
+  // --- Generic Resizable Logic with Proportional Scaling ---
+  function makeResizable(element) {{
+    if (!element) return;
+    
+    const handles = element.querySelectorAll('.resize-handle');
+    if (!handles || handles.length === 0) return;
+    
+    let isResizing = false;
+    let currentHandle = null;
+    let startX, startY, startWidth, startHeight, startLeft, startTop;
+    let aspectRatio = 1;
+    
+    function getEventCoords(e) {{
+      if (e.touches && e.touches.length > 0) {{
+        return {{ x: e.touches[0].clientX, y: e.touches[0].clientY }};
+      }}
+      return {{ x: e.clientX, y: e.clientY }};
+    }}
+    
+    function handleResizeStart(e, handle) {{
+      isResizing = true;
+      currentHandle = handle;
+      
+      const coords = getEventCoords(e);
+      startX = coords.x;
+      startY = coords.y;
+      
+      const rect = element.getBoundingClientRect();
+      startWidth = rect.width;
+      startHeight = rect.height;
+      startLeft = rect.left;
+      startTop = rect.top;
+      
+      // Calculate aspect ratio for proportional resizing
+      aspectRatio = startWidth / startHeight;
+      
+      const m = findMap();
+      if (m) m.dragging.disable();
+      
+      e.preventDefault();
+      e.stopPropagation();
+    }}
+    
+    function handleResizeMove(e) {{
+      if (!isResizing || !currentHandle) return;
+      
+      const coords = getEventCoords(e);
+      const deltaX = coords.x - startX;
+      const deltaY = coords.y - startY;
+      
+      let newWidth = startWidth;
+      let newHeight = startHeight;
+      let newLeft = startLeft;
+      let newTop = startTop;
+      
+      const handleClass = currentHandle.className;
+      
+      // Calculate new dimensions based on handle type
+      if (handleClass.includes('resize-se')) {{
+        // Southeast corner - expand from top-left
+        const maxDelta = Math.max(deltaX, deltaY / aspectRatio);
+        newWidth = startWidth + maxDelta;
+        newHeight = newWidth / aspectRatio;
+      }} else if (handleClass.includes('resize-sw')) {{
+        // Southwest corner - expand from top-right
+        const maxDelta = Math.max(-deltaX, deltaY / aspectRatio);
+        newWidth = startWidth + maxDelta;
+        newHeight = newWidth / aspectRatio;
+        newLeft = startLeft - maxDelta;
+      }} else if (handleClass.includes('resize-ne')) {{
+        // Northeast corner - expand from bottom-left
+        const maxDelta = Math.max(deltaX, -deltaY / aspectRatio);
+        newWidth = startWidth + maxDelta;
+        newHeight = newWidth / aspectRatio;
+        newTop = startTop - (newHeight - startHeight);
+      }} else if (handleClass.includes('resize-nw')) {{
+        // Northwest corner - expand from bottom-right
+        const maxDelta = Math.max(-deltaX, -deltaY / aspectRatio);
+        newWidth = startWidth + maxDelta;
+        newHeight = newWidth / aspectRatio;
+        newLeft = startLeft - maxDelta;
+        newTop = startTop - (newHeight - startHeight);
+      }} else if (handleClass.includes('resize-e')) {{
+        // East edge
+        newWidth = startWidth + deltaX;
+        newHeight = newWidth / aspectRatio;
+        newTop = startTop - (newHeight - startHeight) / 2;
+      }} else if (handleClass.includes('resize-w')) {{
+        // West edge
+        newWidth = startWidth - deltaX;
+        newHeight = newWidth / aspectRatio;
+        newLeft = startLeft + deltaX;
+        newTop = startTop - (newHeight - startHeight) / 2;
+      }} else if (handleClass.includes('resize-s')) {{
+        // South edge
+        newHeight = startHeight + deltaY;
+        newWidth = newHeight * aspectRatio;
+        newLeft = startLeft - (newWidth - startWidth) / 2;
+      }} else if (handleClass.includes('resize-n')) {{
+        // North edge
+        newHeight = startHeight - deltaY;
+        newWidth = newHeight * aspectRatio;
+        newLeft = startLeft - (newWidth - startWidth) / 2;
+        newTop = startTop + deltaY;
+      }}
+      
+      // Apply minimum size constraints
+      const minWidth = parseFloat(element.style.minWidth) || 150;
+      const minHeight = parseFloat(element.style.minHeight) || 100;
+      
+      if (newWidth >= minWidth && newHeight >= minHeight) {{
+        element.style.width = newWidth + 'px';
+        element.style.height = newHeight + 'px';
+        element.style.position = 'absolute';
+        element.style.left = newLeft + 'px';
+        element.style.top = newTop + 'px';
+        element.style.bottom = 'auto';
+        element.style.right = 'auto';
+      }}
+      
+      e.preventDefault();
+      e.stopPropagation();
+    }}
+    
+    function handleResizeEnd(e) {{
+      if (isResizing) {{
+        isResizing = false;
+        currentHandle = null;
+        
+        const m = findMap();
+        if (m) m.dragging.enable();
+        
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    }}
+    
+    // Attach event listeners to all resize handles
+    handles.forEach(handle => {{
+      handle.addEventListener('mousedown', (e) => handleResizeStart(e, handle));
+      handle.addEventListener('touchstart', (e) => handleResizeStart(e, handle), {{ passive: false }});
+    }});
+    
+    document.addEventListener('mousemove', handleResizeMove);
+    document.addEventListener('mouseup', handleResizeEnd);
+    document.addEventListener('touchmove', handleResizeMove, {{ passive: false }});
+    document.addEventListener('touchend', handleResizeEnd);
+    document.addEventListener('touchcancel', handleResizeEnd);
   }}
 
   // Initialize Compass Dragging
@@ -1096,6 +1285,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         if (legend && container) {{
             container.appendChild(legend);
             makeDraggable(legend);
+            makeResizable(legend);
         }}
         
         // Add dynamic scale control (like Google Maps)
