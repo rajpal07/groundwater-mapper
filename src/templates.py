@@ -52,7 +52,7 @@ def get_colormap_info(cmap_name):
              
     return low_hex, mid_hex, high_hex, high_desc, low_desc
 
-def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=None, legend_label="Elevation", colormap="viridis", project_details=None):
+def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=None, legend_label="Elevation", colormap="viridis", project_details=None, min_val=None, max_val=None):
     """
     Injects JavaScript into HTML. Now supports dynamic legend label.
     """
@@ -99,6 +99,10 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     kmz_points_json = json.dumps([{"lat": p.y, "lon": p.x} for p in kmz_points] if kmz_points else [])
     image_bounds_json = json.dumps(image_bounds)
     initial_center_json = json.dumps(initial_center)
+
+    # Format min/max for display if provided
+    min_str = f"{min_val:.2f}" if isinstance(min_val, (int, float)) else "Low"
+    max_str = f"{max_val:.2f}" if isinstance(max_val, (int, float)) else "High"
 
     controls_html = f"""
 <!-- Force Hide Leaflet Controls -->
@@ -335,16 +339,24 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     <!-- Contour Guide -->
     <div style="font-weight:bold; margin-bottom:6px; margin-top:8px; border-top:1px solid #ddd; padding-top:6px; word-wrap:break-word;">How to Read Contour</div>
     
-    <!-- High Gradient -->
-    <div style="display:flex; align-items:center; margin-bottom:4px; flex-wrap:wrap;">
-      <div style="width:20px; height:10px; background:linear-gradient(to right, {mid_hex}, {high_hex}); margin-right:8px; border:1px solid #999; flex-shrink:0;"></div>
-      <span style="word-wrap:break-word; overflow-wrap:break-word; flex:1; min-width:0;">High {legend_label_short} ({high_desc})</span>
-    </div>
-    
-    <!-- Low Gradient -->
-    <div style="display:flex; align-items:center; margin-bottom:4px; flex-wrap:wrap;">
-      <div style="width:20px; height:10px; background:linear-gradient(to right, {low_hex}, {mid_hex}); margin-right:8px; border:1px solid #999; flex-shrink:0;"></div>
-      <span style="word-wrap:break-word; overflow-wrap:break-word; flex:1; min-width:0;">Low {legend_label_short} ({low_desc})</span>
+    <!-- Gradient Scale -->
+    <div style="margin-top:8px; margin-bottom:8px;">
+        <div style="display:flex; justify-content:space-between; font-size:10px; color:#555; margin-bottom:0px;">
+            <span>Min</span>
+            <span>Max</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:11px; font-weight:bold; margin-bottom:2px;">
+            <span>{min_str}</span>
+            <span>{max_str}</span>
+        </div>
+        <div style="width:100%; height:15px; background:linear-gradient(to right, {low_hex}, {mid_hex}, {high_hex}); border:1px solid #999; border-radius:3px;"></div>
+        <div style="display:flex; justify-content:space-between; font-size:9px; color:#555; margin-top:2px;">
+           <span>{low_desc}</span>
+           <span>{high_desc}</span>
+        </div>
+        <div style="text-align:center; font-size:10px; margin-top:2px; font-weight:bold; color:#333;">
+            {legend_label_short}
+        </div>
     </div>
     
     <div style="display:flex; align-items:center; flex-wrap:wrap;">
@@ -359,12 +371,12 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     import base64
     import os
     
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'logo.png')
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'cts logo.jpeg')
     logo_html_str = ""
     if os.path.exists(logo_path):
         with open(logo_path, 'rb') as f:
             logo_base64 = base64.b64encode(f.read()).decode('utf-8')
-        logo_html_str = f'<img src="data:image/png;base64,{logo_base64}" class="logo-img" alt="Project Logo">'
+        logo_html_str = f'<img src="data:image/jpeg;base64,{logo_base64}" class="logo-img" alt="Project Logo">'
     else:
         # Placeholder if logo file not found
         logo_html_str = '<div style="text-align:center; color:#ccc;"><div style="font-size:12px;">(Logo Space)</div></div>'
@@ -623,6 +635,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
   const orangePoints = {target_points_json};
   const overlayBounds = {image_bounds_json};
   const initialCenter = {initial_center_json};
+  const paramLabel = "{legend_label}";
 
   // --- Update Compass Rotation ---
   function updateCompass() {{
@@ -1247,7 +1260,10 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
           const fullName = pt.name || 'Excel Point';
           
           // Popup with full details
-          marker.bindPopup(`<b>${{fullName}}</b><br>ID: ${{pt.id}}<br>Lat: ${{pt.lat.toFixed(6)}}<br>Lon: ${{pt.lon.toFixed(6)}}`);
+          const valDisplay = pt.value !== undefined && pt.value !== null ? Number(pt.value).toFixed(2) : 'N/A';
+          const popupContent = `<b>${{fullName}}</b><br>ID: ${{pt.id}}<br>Lat: ${{pt.lat.toFixed(6)}}<br>Lon: ${{pt.lon.toFixed(6)}}<br><b>${{paramLabel}}</b>: ${{valDisplay}}`;
+          
+          marker.bindPopup(popupContent);
           
           // Permanent label with short ID
           marker.bindTooltip(shortId, {{
@@ -1260,12 +1276,12 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
           // Update popup on drag
           marker.on('drag', function(e) {{
               const latlng = e.target.getLatLng();
-              marker.setPopupContent(`<b>${{fullName}} (Dragging...)</b><br>ID: ${{pt.id}}<br>Lat: ${{latlng.lat.toFixed(6)}}<br>Lon: ${{latlng.lng.toFixed(6)}}`);
+              marker.setPopupContent(`<b>${{fullName}} (Dragging...)</b><br>ID: ${{pt.id}}<br>Lat: ${{latlng.lat.toFixed(6)}}<br>Lon: ${{latlng.lng.toFixed(6)}}<br><b>${{paramLabel}}</b>: ${{valDisplay}}`);
           }});
           
           marker.on('dragend', function(e) {{
               const latlng = e.target.getLatLng();
-              marker.setPopupContent(`<b>${{fullName}}</b><br>ID: ${{pt.id}}<br>Lat: ${{latlng.lat.toFixed(6)}}<br>Lon: ${{latlng.lng.toFixed(6)}}`);
+              marker.setPopupContent(`<b>${{fullName}}</b><br>ID: ${{pt.id}}<br>Lat: ${{latlng.lat.toFixed(6)}}<br>Lon: ${{latlng.lng.toFixed(6)}}<br><b>${{paramLabel}}</b>: ${{valDisplay}}`);
               console.log(`Borewell ${{shortId}} moved to: [${{latlng.lat}}, ${{latlng.lng}}]`);
           }});
       }});

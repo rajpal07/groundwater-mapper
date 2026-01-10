@@ -45,7 +45,22 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
         raise ValueError(f"Column '{target_col}' not found in data.")
 
     df = df[df[target_col].notna()]
+    df = df[df[target_col].notna()]
     df = df[df[target_col] != '-']
+
+    # --- Coordinate Mapping for separate formats ---
+    if 'Geographical Coordinates (GDA2020)' in df.columns:
+        print("Detected 'Geographical Coordinates (GDA2020)' - Mapping to Lat/Lon...")
+        try:
+            col_idx = df.columns.get_loc('Geographical Coordinates (GDA2020)')
+            # Assuming adjacent column is Longitude (Lat, Lon convention in this file)
+            lat_col = df.columns[col_idx]
+            lon_col = df.columns[col_idx + 1] 
+            df['Latitude'] = df[lat_col]
+            df['Longitude'] = df[lon_col]
+        except Exception as e:
+            print(f"Error mapping specific coordinates: {e}")
+    # -----------------------------------------------
 
     df['Easting'] = pd.to_numeric(df.get('Easting'), errors='coerce')
     df['Northing'] = pd.to_numeric(df.get('Northing'), errors='coerce')
@@ -113,74 +128,83 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     # griddata defaults to 'linear' and leaves NaNs outside convex hull.
     # Rbf (Radial Basis Function) smoothly extrapolates to fill the grid.
     
-    # Add a small amount of noise to coordinates to prevent singular matrix if points are duplicate/collinear
     # (Optional but robust)
-    
-    # Interpolation Strategy:
-    # 1. Use RBF for smooth internal interpolation (or Linear as fallback).
-    # 2. STRICTLY MASK to the Convex Hull of the data points to avoid misleading extrapolation.
-    #    (Groundwater data should not be inferred far beyond monitoring wells).
-    
-    # Create a mask using 'linear' interpolation which intrinsically returns NaNs outside the convex hull
-    mask_z = griddata((df[x_col], df[y_col]), df[target_col], (grid_x, grid_y), method='linear')
-    is_outside_hull = np.isnan(mask_z)
 
-    try:
-        # Try RBF for smoothness
-        # 'linear' radial basis function is good for groundwater
-        rbf = Rbf(df[x_col], df[y_col], df[target_col], function='linear')
-        grid_z = rbf(grid_x, grid_y)
-        
-        # Apply Hull Mask
-        grid_z[is_outside_hull] = np.nan
-        
-    except Exception as e:
-        print(f"RBF Interpolation failed: {e}. Fallback to linear.")
-        # Linear already computed as mask_z (valid info inside hull)
-        grid_z = mask_z
-        # No 'nearest' fill anymore - we WANT NaNs outside.
+    # Interpolation Strategy
+    # 'hybrid': Cubic for contour lines (smooth), Linear for arrows/colors (accurate).
+    # 'linear': Linear for everything (strict engineering accuracy).
+    
+    # 1. Base Grid (Linear/TIN) - Used for Physics (Arrows) and Colors
+    grid_z_linear = griddata((df[x_col], df[y_col]), df[target_col], (grid_x, grid_y), method='linear')
+    grid_z = grid_z_linear # Default grid
+
+    # 2. Smooth Grid (Cubic) - Used ONLY for Contour Lines in Hybrid mode
+    grid_z_smooth = None
+    if interpolation_method == 'hybrid':
+        grid_z_smooth = griddata((df[x_col], df[y_col]), df[target_col], (grid_x, grid_y), method='cubic')
+        # Fill NaNs in smooth grid with linear values
+        if np.isnan(grid_z_smooth).any():
+            mask = np.isnan(grid_z_smooth)
+            grid_z_smooth[mask] = grid_z_linear[mask]
 
     # Generate Contour Image
     z_min, z_max = df[target_col].min(), df[target_col].max()
     z_range = z_max - z_min
     
-    # Dynamic Interval Logic (Restored from Backup)
-    interval = 1.0 if z_range > 10 else 0.5 if z_range > 5 else 0.2 if z_range > 2 else 0.1 if z_range > 1 else 0.05 if z_range > 0.5 else 0.01
+    # Smart Levels (Fixed Intervals)
+    if z_range > 10: interval = 1.0
+    elif z_range > 5: interval = 0.5
+    elif z_range > 2: interval = 0.2
+    elif z_range > 0.5: interval = 0.05
+    else: interval = 0.05
     
-    # Ensure range isn't zero
-    if z_range == 0:
-        levels = np.linspace(z_min, z_max, 20)
-    else:
-        start = np.floor(z_min / interval) * interval
-        end = np.ceil(z_max / interval) * interval + interval
-        levels = np.arange(start, end, interval)
-
+    # Ensure nice numbers
+    levels = np.arange(np.floor(z_min/interval)*interval, np.ceil(z_max/interval)*interval + interval, interval)
+    
     # Plot
     fig, ax = plt.subplots(figsize=(10, 10))
-    # Filled contours (Visuals) - Always show colored gradient
-    # colormap is passed via argument (default 'viridis')
-    contour_filled = ax.contourf(grid_x, grid_y, grid_z, levels=levels, cmap=colormap, alpha=0.6)
+    # CRITICAL: Force equal aspect ratio to prevent distortion of arrows and geometry
+    ax.set_aspect('equal')
+    
+    # Filled contours (Visuals) - Always uses Linear Grid for accuracy of colors vs arrows
+    contour_filled = ax.contourf(grid_x, grid_y, grid_z, levels=levels, cmap=colormap, alpha=0.7)
     
     # Contour lines and Arrows - Only for groundwater/elevation
     if generate_contours:
-        # Contour lines (Structure) - Made darker and slightly thicker for visibility
-        contour_lines = ax.contour(grid_x, grid_y, grid_z, levels=levels, colors='black', linewidths=0.8, alpha=0.8)
+        # Determine which grid to use for Lines
+        grid_for_lines = grid_z_smooth if interpolation_method == 'hybrid' else grid_z
+        
+        # Plot Contour Lines
+        contour_lines = ax.contour(grid_x, grid_y, grid_for_lines, levels=levels, colors='black', linewidths=0.8, alpha=0.8)
+        # Add labels to contour lines for clarity
+        ax.clabel(contour_lines, inline=True, fontsize=8, fmt='%.2f')
+        
+        # Quiver for flow direction (Arrows at points) - Uses Linear Grid (Physics)
         
         # Quiver for flow direction (Arrows at points)
-        dz_dx, dz_dy = np.gradient(grid_z)
+        # Calculate step sizes for correct gradient scaling (fix for aspect ratio distortion)
+        dx_step = xi[1] - xi[0]
+        dy_step = yi[1] - yi[0]
         
-        # Normalize vectors for consistent arrow size (Restored)
+        # Pass step sizes: axis0=y (dy_step), axis1=x (dx_step)
+        dz_dy, dz_dx = np.gradient(grid_z, dy_step, dx_step) 
+        
+        # Normalize vectors for consistent arrow size
         magnitude = np.sqrt(dz_dx**2 + dz_dy**2)
         # Avoid division by zero
         u = -dz_dx / (magnitude + 1e-10)
         v = -dz_dy / (magnitude + 1e-10)
         
         # Plot Arrows (Quiver)
-        # HD Settings: Higher density (lower step), optimized width/scale for 300 DPI
-        step = 10 
-        # width scale interacts with figsize and dpi. 0.002 is relative to plot width.
+        # angles='xy' is CRITICAL: it ensures arrows point effectively from (x,y) to (x+u, y+v) in DATA coordinates.
+        # Combined with set_aspect('equal'), this guarantees correct direction.
+        
+        # Reduced density: step=15 (was 19) to increase count further
+        step = 15
+        
+        # Shorter arrows: scale=0.12 (was 0.08). Reduce length significantly.
         ax.quiver(grid_x[::step, ::step], grid_y[::step, ::step], u[::step, ::step], v[::step, ::step], 
-                  color='red', scale=25, width=0.0025, headwidth=3, headlength=4, alpha=0.9)
+                  color='red', angles='xy', scale_units='xy', scale=0.12/dx_step, width=0.003, headwidth=4, headlength=5, alpha=0.9)
 
     ax.axis('off')
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
@@ -204,7 +228,8 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
             "lat": lat, 
             "lon": lon, 
             "id": i,
-            "name": get_point_name(df.iloc[i], i)
+            "name": get_point_name(df.iloc[i], i),
+            "value": df.iloc[i][target_col]
         } 
         for i, (lat, lon) in enumerate(zip(target_lats, target_lons))
     ]

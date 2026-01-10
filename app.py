@@ -1,6 +1,10 @@
 import streamlit as st
 import sys
 import os
+import warnings
+
+# Suppress pydantic deprecation warnings from llama-index
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
 # Add the current directory to sys.path to ensure 'src' module can be found
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -16,9 +20,21 @@ import uuid
 
 st.set_page_config(layout="wide", page_title="Groundwater Mapper")
 
+# --- App Navigation ---
+with st.sidebar:
+    st.title("Navigation")
+    app_mode = st.radio("Go to:", ["Groundwater Map", "Arrow Verification"])
+    st.divider()
+
+if app_mode == "Arrow Verification":
+    import src.verification_ui as verification_ui
+    verification_ui.render()
+    st.stop()  # Stop main script execution here
+
+# --- Main Map Application Starts Here ---
 st.title("Groundwater Elevation Mapper")
 st.markdown("""
-Upload your Excel data and KMZ file to generate an interactive groundwater contour map.
+Upload your Excel data to generate an interactive groundwater contour map.
 """)
 
 # Output path
@@ -32,7 +48,7 @@ if 'processed_source' not in st.session_state:
 if 'current_job_id' not in st.session_state:
     st.session_state['current_job_id'] = None
 
-# --- Sidebar Definition ---
+# --- Sidebar Definition for Map App ---
 with st.sidebar:
     st.header("1. Data Upload")
     # API Key Handling
@@ -43,7 +59,7 @@ with st.sidebar:
         api_key = st.text_input("Llama Cloud API Key", type="password")
     
     excel_file = st.file_uploader("Upload Excel File (.xlsx)", type=["xlsx", "xls"])
-    kmz_file = st.file_uploader("Upload KMZ File (.kmz)", type=["kmz", "zip"], help="On mobile, use .zip")
+    # KMZ upload removed as per request
     
     # Validation Warning in Sidebar if Key missing
     if not api_key:
@@ -173,7 +189,8 @@ if st.session_state['processed_data'] is not None:
     # Actually, user complained about opacity/darkness. 'plasma' or 'inferno' are very bright.
     # 'RdYlBu_r' is good for divergence. 
     default_cmap_idx = 0
-    if "pH" in selected_param or "Salinity" in selected_param or "TDS" in selected_param:
+    # Smart default for specific parameters (pH/Salinity usually need divergent)
+    if any(x in selected_param for x in ["pH", "Salinity", "TDS"]):
          if 'RdYlBu_r' in colormap_options: default_cmap_idx = colormap_options.index('RdYlBu_r')
          
     selected_cmap = st.selectbox("Color Scheme", colormap_options, index=default_cmap_idx)
@@ -182,13 +199,14 @@ if st.session_state['processed_data'] is not None:
         with st.spinner(f"Generating map for {selected_param}..."):
             try:
                 # 1. Process KMZ
+                # 1. Process KMZ (Disabled)
                 kmz_points = None
-                if kmz_file:
-                    try:
-                        kmz_points = geo.extract_kmz_points(kmz_file)
-                        st.write(f"✅ KMZ processed: {len(kmz_points)} ref points")
-                    except Exception as e:
-                        st.warning(f"KMZ Error: {e}")
+                # if kmz_file:
+                #    try:
+                #        kmz_points = geo.extract_kmz_points(kmz_file)
+                #        st.write(f"✅ KMZ processed: {len(kmz_points)} ref points")
+                #    except Exception as e:
+                #        st.warning(f"KMZ Error: {e}")
 
                 # 2. Process Data for Map
                 # Pass DataFrame directly to utils
@@ -233,7 +251,29 @@ if st.session_state['processed_data'] is not None:
                     "job_no": "#773-01"
                 }
                 
-                templates.inject_controls_to_html(OUTPUT_MAP_PATH_UNIQUE, image_bounds, target_points, kmz_points, legend_label=selected_param, colormap=selected_cmap, project_details=project_details)
+                # Calculate Min/Max for Legend
+                min_val = None
+                max_val = None
+                try:
+                    # Ensure numeric
+                    valid_series = pd.to_numeric(df[selected_param], errors='coerce').dropna()
+                    if not valid_series.empty:
+                        min_val = float(valid_series.min())
+                        max_val = float(valid_series.max())
+                except Exception as e:
+                    st.warning(f"Could not calculate range for legend: {e}")
+
+                templates.inject_controls_to_html(
+                    OUTPUT_MAP_PATH_UNIQUE, 
+                    image_bounds, 
+                    target_points, 
+                    kmz_points, 
+                    legend_label=selected_param, 
+                    colormap=selected_cmap, 
+                    project_details=project_details,
+                    min_val=min_val,
+                    max_val=max_val
+                )
                 
                 # Render
                 with open(OUTPUT_MAP_PATH_UNIQUE, 'r', encoding='utf-8') as f:

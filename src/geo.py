@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from pyproj import Transformer
 from zipfile import ZipFile
-from pykml import parser
+# from pykml import parser  # KMZ functionality disabled
 from shapely.geometry import Point
 
 # Try to import global-land-mask for robust detection
