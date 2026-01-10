@@ -263,19 +263,12 @@ def render():
                         
                         # Web Verification
                         st.write("🌐 Connecting to EPA website (automating form)...")
+                        epa_result = None
                         try:
                             epa_result = verifier.get_epa_web_result(points, headless=True)
                             if epa_result is not None:
                                 web_az = epa_result['azimuth']
                                 st.write(f"✅ EPA Website Result: **{web_az:.2f}°**")
-                                
-                                # Display screenshots
-                                st.write("📸 **EPA Automation Screenshots:**")
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    st.image(epa_result['screenshot_form'], caption="Form Filled Automatically", use_container_width=True)
-                                with col2:
-                                    st.image(epa_result['screenshot_result'], caption="EPA Calculation Results", use_container_width=True)
                             else:
                                 web_az = None
                                 st.error("❌ Failed to get result from EPA website.")
@@ -286,6 +279,16 @@ def render():
 
                         status.update(label="Verification Complete!", state="complete", expanded=False)
                     
+                    # --- Display Screenshots (Always Visible) ---
+                    if epa_result is not None and 'screenshot_form' in epa_result:
+                        st.divider()
+                        st.subheader("📸 EPA Automation Evidence")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.image(epa_result['screenshot_form'], caption="1. Form Filled Automatically", use_container_width=True)
+                        with col2:
+                            st.image(epa_result['screenshot_result'], caption="2. EPA Calculation Results", use_container_width=True)
+
                     # Generate Report HTML
                     html_report = verifier.generate_html_report(
                         points, local_az, web_az, u_vec, v_vec, return_html_string=True
