@@ -262,37 +262,20 @@ def render():
                         st.write(f"✅ Local Result: **{local_az:.2f}°**")
                         
                         # Web Verification
-                        st.write("🌐 Connecting to EPA website (automating form)...")
-                        epa_result = None
-                        try:
-                            epa_result = verifier.get_epa_web_result(points, headless=True)
-                            if epa_result is not None:
-                                web_az = epa_result['azimuth']
-                                st.write(f"✅ EPA Website Result: **{web_az:.2f}°**")
-                            else:
-                                web_az = None
-                                st.error("❌ Failed to get result from EPA website.")
-                        except Exception as e:
-                            web_az = None
-                            st.error(f"⚠️ EPA automation unavailable: {e}")
-                            st.info("💡 **Note:** EPA automation works on Streamlit Cloud deployment. Local calculation is still accurate!")
-                            status.update(label="Verification Completed with Warning", state="error", expanded=True)
-                        else:
-                            if web_az is None:
-                                status.update(label="Verification Failed (EPA Site Error)", state="error", expanded=True)
-                            else:
-                                status.update(label="Verification Complete!", state="complete", expanded=False)
+                        # Manual Web Verification (Iframe)
+                        st.write("🌐 **Manual Verification:** Use the embedded EPA website below.")
+                        st.info("💡 Enter the data from the 'Input Wells' section below into the calculation tool.")
+                        
+                        # Embed EPA Website
+                        # Using a slightly larger height to accommodate the form
+                        st.components.v1.iframe(src=verifier.EPA_URL, height=800, scrolling=True)
+                        
+                        # No automated result to display
+                        web_az = None
+                        
+                        status.update(label="Local Verification Complete (Manual Check Required)", state="complete", expanded=False)
                     
-                    # --- Display Screenshots (Always Visible) ---
-                    if epa_result is not None and 'screenshot_form' in epa_result:
-                        st.divider()
-                        st.subheader("📸 EPA Automation Evidence")
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.image(epa_result['screenshot_form'], caption="1. Form Filled Automatically", use_container_width=True)
-                        with col2:
-                            st.image(epa_result['screenshot_result'], caption="2. EPA Calculation Results", use_container_width=True)
-
+                    
                     # Generate Report HTML
                     html_report = verifier.generate_html_report(
                         points, local_az, web_az, u_vec, v_vec, return_html_string=True
