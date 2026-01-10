@@ -239,22 +239,6 @@ def render():
             if len(selected_wells) == 3:
                 st.info(f"✓ Ready to verify: {', '.join(selected_wells)}")
                 
-                # Filter data for selected wells
-                selected_data = df[df['Well ID'].isin(selected_wells)][['Well ID', 'Easting', 'Northing', 'Groundwater Elevation mAHD']]
-                
-                st.info("📋 **Selected Well Data (Use this for Manual EPA Check):**")
-                st.dataframe(
-                    selected_data,
-                    hide_index=True,
-                    use_container_width=True,
-                    column_config={
-                        "Well ID": st.column_config.TextColumn("Well ID"),
-                        "Easting": st.column_config.NumberColumn("Easting (X)", format="%.3f"),
-                        "Northing": st.column_config.NumberColumn("Northing (Y)", format="%.3f"),
-                        "Groundwater Elevation mAHD": st.column_config.NumberColumn("Head (H)", format="%.3f")
-                    }
-                )
-
                 # 3. Run Verification
                 if st.button("🚀 Run Verification", type="primary", key="verify_btn"):
                     
@@ -280,6 +264,23 @@ def render():
                         # Web Verification
                         # Manual Web Verification (Iframe)
                         st.write("🌐 **Manual Verification:** Use the embedded EPA website below.")
+                        
+                        st.info("💡 **Copy this data into the EPA Calculator below:**")
+                        
+                        # Show Data Table for Manual Entry
+                        selected_subset = subset[['Well ID', 'Easting', 'Northing', 'Groundwater Elevation mAHD']]
+                        st.dataframe(
+                            selected_subset,
+                            hide_index=True,
+                            use_container_width=True,
+                            column_config={
+                                "Well ID": st.column_config.TextColumn("Well ID"),
+                                "Easting": st.column_config.NumberColumn("Easting (X)", format="%.3f"),
+                                "Northing": st.column_config.NumberColumn("Northing (Y)", format="%.3f"),
+                                "Groundwater Elevation mAHD": st.column_config.NumberColumn("Head (H)", format="%.3f")
+                            }
+                        )
+
                         st.info("💡 Enter the data from the 'Input Wells' section below into the calculation tool.")
                         
                         # Embed EPA Website
