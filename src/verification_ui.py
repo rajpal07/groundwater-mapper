@@ -276,8 +276,12 @@ def render():
                             web_az = None
                             st.error(f"⚠️ EPA automation unavailable: {e}")
                             st.info("💡 **Note:** EPA automation works on Streamlit Cloud deployment. Local calculation is still accurate!")
-
-                        status.update(label="Verification Complete!", state="complete", expanded=False)
+                            status.update(label="Verification Completed with Warning", state="error", expanded=True)
+                        else:
+                            if web_az is None:
+                                status.update(label="Verification Failed (EPA Site Error)", state="error", expanded=True)
+                            else:
+                                status.update(label="Verification Complete!", state="complete", expanded=False)
                     
                     # --- Display Screenshots (Always Visible) ---
                     if epa_result is not None and 'screenshot_form' in epa_result:

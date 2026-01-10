@@ -202,9 +202,14 @@ def generate_html_report(points, local_az, web_az, u_vec, v_vec, return_html_str
     If return_html_string is True, returns the HTML content as a string instead of writing to file.
     """
     # Determine verdict
-    diff = abs(local_az - web_az) if web_az is not None else 0
-    verdict = "MATCH" if diff < 1.0 else "FAIL"
-    verdict_color = "#10b981" if verdict == "MATCH" else "#ef4444"
+    if web_az is None:
+        diff = 0
+        verdict = "N/A" # Or FAIL
+        verdict_color = "#ef4444" # Red
+    else:
+        diff = abs(local_az - web_az)
+        verdict = "MATCH" if diff < 1.0 else "FAIL"
+        verdict_color = "#10b981" if verdict == "MATCH" else "#ef4444"
     
     # Generate Map
     map_b64 = create_map_base64(points, u_vec, v_vec)

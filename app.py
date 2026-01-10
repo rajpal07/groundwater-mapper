@@ -3,6 +3,17 @@ import sys
 import os
 import warnings
 
+# Ensure Playwright browsers are installed (for Streamlit Cloud)
+import subprocess
+try:
+    # Check if we can run playwright (simple check)
+    subprocess.run(["playwright", "--version"], check=True, capture_output=True)
+    # Check/Install chromium
+    print("Installing Playwright browsers...")
+    subprocess.run(["playwright", "install", "chromium"], check=True)
+except Exception as e:
+    print(f"Warning: Could not run playwright install: {e}")
+
 # Suppress pydantic deprecation warnings from llama-index
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
