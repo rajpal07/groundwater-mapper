@@ -371,7 +371,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     import base64
     import os
     
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'assets', 'cts_logo.jpeg')
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'assets', 'cts_logo.png')
     print(f"DEBUG: Looking for logo at: {logo_path}")
     
     logo_html_str = ""
@@ -379,7 +379,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         print("DEBUG: Logo file found!")
         with open(logo_path, 'rb') as f:
             logo_base64 = base64.b64encode(f.read()).decode('utf-8')
-        logo_html_str = f'<img src="data:image/jpeg;base64,{logo_base64}" class="logo-img" alt="Project Logo">'
+        logo_html_str = f'<img src="data:image/png;base64,{logo_base64}" class="logo-img" alt="Project Logo">'
     else:
         print("DEBUG: Logo file NOT found!")
         # Try finding any jpeg in assets as fallback?
