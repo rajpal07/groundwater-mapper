@@ -371,15 +371,25 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     import base64
     import os
     
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'cts logo.jpeg')
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'assets', 'cts_logo.jpeg')
+    print(f"DEBUG: Looking for logo at: {logo_path}")
+    
     logo_html_str = ""
     if os.path.exists(logo_path):
+        print("DEBUG: Logo file found!")
         with open(logo_path, 'rb') as f:
             logo_base64 = base64.b64encode(f.read()).decode('utf-8')
         logo_html_str = f'<img src="data:image/jpeg;base64,{logo_base64}" class="logo-img" alt="Project Logo">'
     else:
-        # Placeholder if logo file not found
-        logo_html_str = '<div style="text-align:center; color:#ccc;"><div style="font-size:12px;">(Logo Space)</div></div>'
+        print("DEBUG: Logo file NOT found!")
+        # Try finding any jpeg in assets as fallback?
+        # Listing dir to debug
+        assets_dir = os.path.dirname(logo_path)
+        if os.path.exists(assets_dir):
+            print(f"DEBUG: Assets dir content: {os.listdir(assets_dir)}")
+        
+        logo_html_str = '<div style="text-align:center; color:#ccc;"><div style="font-size:12px;">(Logo Missing)</div></div>'
+
 
     footer_html = f'''
 <!-- Force Hide Leaflet Controls -->
