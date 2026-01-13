@@ -273,6 +273,8 @@ def render():
                             selected_subset,
                             hide_index=True,
                             use_container_width=True,
+
+
                             column_config={
                                 "Well ID": st.column_config.TextColumn("Well ID"),
                                 "Easting": st.column_config.NumberColumn("Easting (X)", format="%.3f"),
