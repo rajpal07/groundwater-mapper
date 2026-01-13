@@ -8,3 +8,7 @@ kaleido
 shapely
 geemap
 global-land-mask
+pyproj
+scipy
+matplotlib
+numpy
