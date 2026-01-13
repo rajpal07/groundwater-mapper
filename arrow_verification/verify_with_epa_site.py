@@ -1,4 +1,3 @@
-
 import os
 import sys
 import pandas as pd
@@ -6,13 +5,9 @@ import numpy as np
 import time
 import webbrowser
 
-try:
-    from playwright.sync_api import sync_playwright
-except ImportError:
-    print("Error: 'playwright' library is not installed.")
-    print("Please install it running: pip install playwright")
-    print("Then install browsers: playwright install")
-    sys.exit(1)
+# Playwright automation removed as per user request
+
+
 
 EPA_URL = "https://www3.epa.gov/ceampubl/learn2model/part-two/onsite/gradient4plus-ns.html"
 
@@ -48,76 +43,8 @@ def calculate_exact_local(points):
         print(f"Local calc failed: {e}")
         return None, 0, 0
 
-def get_epa_web_result(points, headless=False):
-    """
-    Uses Playwright to enter data into EPA website and retrieve result.
-    points: list of 3 dicts with x, y, h, id.
-    """
-    print(f"\n[Browser] Launching {'Headless' if headless else 'Visible'} Browser...")
-    
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless)
-        page = browser.new_page()
-        
-        print(f"[Browser] Navigating to {EPA_URL}...")
-        page.goto(EPA_URL)
-        
-        # Fill Site Name
-        page.fill('input[name="site"]', "Automated Verification")
-        
-        # Fill Data Rows
-        # The form uses names like id1, x1, y1, h1 for row 1
-        for i, point in enumerate(points):
-            row_idx = i + 1
-            print(f"[Browser] Filling Row {row_idx}: {point['name']}...")
-            
-            page.fill(f'input[name="id{row_idx}"]', str(point['name']))
-            page.fill(f'input[name="x{row_idx}"]', str(point['x']))
-            page.fill(f'input[name="y{row_idx}"]', str(point['y']))
-            page.fill(f'input[name="h{row_idx}"]', str(point['h']))
-        
-        # Create unique filenames for screenshots (avoid conflicts between users)
-        import tempfile
-        import uuid
-        session_id = str(uuid.uuid4())[:8]
-        temp_dir = tempfile.gettempdir()
-        screenshot_form = os.path.join(temp_dir, f"epa_form_{session_id}.png")
-        screenshot_result = os.path.join(temp_dir, f"epa_result_{session_id}.png")
-        
-        # Take screenshot after filling form
-        print("[Browser] Taking screenshot of filled form...")
-        page.screenshot(path=screenshot_form)
-        
-        # Click Calculate
-        print("[Browser] Clicking 'Calculate'...")
-        # The button is an input with value="Calculate"
-        page.click('input[value="Calculate"]')
-        
-        # Wait for result to populate 
-        print("[Browser] Waiting for results...")
-        page.wait_for_timeout(1000) 
-        
-        # Take screenshot of results
-        print("[Browser] Taking screenshot of results...")
-        page.screenshot(path=screenshot_result)
-        
-        # Extract Result
-        result_deg = page.input_value('input[name="degrees"]')
-        
-        print(f"[Browser] Scraped Result: {result_deg} degrees")
-            
-        browser.close()
-        
-        try:
-            result_value = float(result_deg)
-            # Return both the result and screenshot paths
-            return {
-                'azimuth': result_value,
-                'screenshot_form': screenshot_form,
-                'screenshot_result': screenshot_result
-            }
-        except:
-            return None
+# get_epa_web_result function removed
+
 
 def get_cardinal_direction(azimuth):
     dirs = ['North', 'North-East', 'East', 'South-East', 'South', 'South-West', 'West', 'North-West']
@@ -603,9 +530,9 @@ def main():
     print(f"Local Result: {local_az:.4f} degrees")
     print(f"Vector: u={u_vec:.4f}, v={v_vec:.4f}")
     
-    # 2. Web Verification
-    print("\n--- Running EPA Web Verification ---")
-    web_az = get_epa_web_result(points, headless=False)
+    # 2. Web Verification (Skipped)
+    print("\n--- EPA Web Verification Disabled ---")
+    web_az = None
     
     # 3. Report
     generate_html_report(points, local_az, web_az, u_vec, v_vec)
