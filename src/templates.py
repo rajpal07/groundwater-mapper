@@ -1205,7 +1205,6 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
   }};
 
   // --- Label Solver (Force Directed) ---
-  // --- Label Solver (Force Directed) ---
   class LabelSolver {{
     constructor(map) {{
         this.map = map;
