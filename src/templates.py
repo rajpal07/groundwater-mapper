@@ -226,70 +226,43 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.js"></script>
 
 <!-- Compass UI - Realistic and Draggable -->
+<!-- Compass UI - Two-Ring Minimalist -->
 <div id="compass" style="position:fixed; top:80px; left:10px; z-index:100000 !important; width:80px; height:80px; cursor:move; touch-action: none; -webkit-user-select: none; user-select: none;" title="Drag to reposition | Click to reset rotation">
-    <div id="compassInner" style="position:relative; width:100%; height:100%; background:radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(240,240,240,0.95) 100%); border-radius:50%; border:4px solid #2c3e50; transition: transform 0.3s ease;">
-        <!-- Outer ring with degree marks -->
-        <div style="position:absolute; top:50%; left:50%; width:90%; height:90%; transform:translate(-50%, -50%);">
-            <!-- Cardinal direction markers -->
-            <div style="position:absolute; top:2px; left:50%; transform:translateX(-50%); color:#c0392b; font-weight:bold; font-size:18px;">N</div>
-            <div style="position:absolute; bottom:2px; left:50%; transform:translateX(-50%); color:#34495e; font-weight:bold; font-size:14px;">S</div>
-            <div style="position:absolute; top:50%; right:2px; transform:translateY(-50%); color:#34495e; font-weight:bold; font-size:14px;">E</div>
-            <div style="position:absolute; top:50%; left:2px; transform:translateY(-50%); color:#34495e; font-weight:bold; font-size:14px;">W</div>
+    <!-- Main Housing (Outer Ring) -->
+    <div id="compassInner" style="position:relative; width:100%; height:100%; background:#1a1a1a; border-radius:50%; border:2px solid #555; transition: transform 0.3s ease; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
+        
+        <!-- N Label - Positioned in the outer ring area -->
+        <div style="position:absolute; top:2px; left:50%; transform:translateX(-50%); color:#fff; font-family: 'Arial', sans-serif; font-weight:bold; font-size:14px; pointer-events:none; text-shadow:0 0 2px rgba(0,0,0,0.8); z-index: 2;">N</div>
+
+        <!-- Inner Circle (Needle Container) -->
+        <!-- Inset by 12px on all sides to create the ring effect -->
+        <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); width:65%; height:65%; background:radial-gradient(circle at 30% 30%, #2a2a2a, #000); border-radius:50%; border:1px solid #444; box-shadow: inset 0 2px 5px rgba(0,0,0,0.8);">
+            
+            <!-- Needle (Centered in Inner Circle) -->
+            <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); width:0; height:0;">
+                 <!-- North (Red Tapered) -->
+                 <!-- Size tuned to fit in the 65% inner circle (approx 52px diam) -->
+                <div style="position:absolute; bottom:0; left:-4px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 20px solid #ff3333; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4));"></div>
+                 <!-- South (Dark Grey Tapered) -->
+                <div style="position:absolute; top:0; left:-4px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 20px solid #444; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4));"></div>
+            </div>
+            
+             <!-- Center Pin -->
+            <div style="position:absolute; top:50%; left:50%; width:6px; height:6px; transform:translate(-50%, -50%); background:#e0e0e0; border-radius:50%; border:1px solid #000; z-index:10; box-shadow: 0 1px 2px rgba(0,0,0,0.5);"></div>
         </div>
-        
-        <!-- Center circle -->
-        <div style="position:absolute; top:50%; left:50%; width:12px; height:12px; transform:translate(-50%, -50%); background:#2c3e50; border-radius:50%; border:2px solid #ecf0f1;"></div>
-        
-        <!-- North arrow (red) -->
-        <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%);">
-            <div style="position:absolute; bottom:6px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:8px solid transparent; border-right:8px solid transparent; border-bottom:35px solid #c0392b;"></div>
-        </div>
-        
-        <!-- South arrow (white) -->
-        <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%);">
-            <div style="position:absolute; top:6px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:8px solid transparent; border-right:8px solid transparent; border-top:35px solid #ecf0f1;"></div>
-        </div>
-        
-        <!-- Decorative tick marks -->
-        <div style="position:absolute; top:8px; left:50%; width:2px; height:8px; background:#95a5a6; transform:translateX(-50%);"></div>
-        <div style="position:absolute; bottom:8px; left:50%; width:2px; height:8px; background:#95a5a6; transform:translateX(-50%);"></div>
-        <div style="position:absolute; top:50%; right:8px; width:8px; height:2px; background:#95a5a6; transform:translateY(-50%);"></div>
-        <div style="position:absolute; top:50%; left:8px; width:8px; height:2px; background:#95a5a6; transform:translateY(-50%);"></div>
     </div>
 </div>
 
 <!-- Controls UI -->
-<div id="map-controls" style="position:fixed; top:10px; right:10px; z-index:100000 !important; background:rgba(255,255,255,0.95); padding:10px; border-radius:6px; font-family:Arial,Helvetica,sans-serif; pointer-events:auto;">
-  <div style="margin-bottom:8px;">
-    <label>Move Scale: </label>
-    <input type="number" id="moveScale" value="0.01" step="0.01" min="0.01" style="width:60px;">
-    <br>
-    <button onclick="moveImage('up')" style="margin:2px;">⬆️</button>
-    <button onclick="moveImage('down')" style="margin:2px;">⬇️</button>
-    <button onclick="moveImage('left')" style="margin:2px;">⬅️</button>
-    <button onclick="moveImage('right')" style="margin:2px;">➡️</button>
+<div id="map-controls" style="position:fixed; top:10px; right:10px; z-index:100000 !important; background:rgba(255,255,255,0.95); padding:10px; border-radius:6px; font-family:Arial,Helvetica,sans-serif; pointer-events:auto; box-shadow: 0 0 5px rgba(0,0,0,0.2);">
+  <div style="margin-bottom:10px;">
+    <label style="font-size:11px; font-weight:bold; display:block; margin-bottom:3px; color:#333;">Figure Title:</label>
+    <input type="text" id="input-attachment-title" value="{pd_safe['attachment_title']}" style="width: 130px; padding:3px; font-size:11px; border:1px solid #ccc; border-radius:3px;" oninput="document.getElementById('footer-attachment-title').innerText = this.value">
   </div>
 
-  <div style="margin-bottom:8px;">
-    <label>Scale Factor: </label>
-    <input type="number" id="scaleAmount" value="1.1" step="0.1" min="0.1" style="width:60px;">
-    <br>
-    <button onclick="scaleImage('expand')" style="margin:2px;">🔍 Expand</button>
-    <button onclick="scaleImage('contract')" style="margin:2px;">🔎 Contract</button>
-  </div>
-
-  <div style="margin-bottom:8px;">
-    <label>Rotation (deg): </label>
-    <input type="number" id="rotationDegrees" value="15" step="1" style="width:60px;">
-    <br>
-    <button onclick="rotateImage('left')" style="margin:2px;">↺</button>
-    <button onclick="rotateImage('right')" style="margin:2px;">↻</button>
-  </div>
-
-  <div>
-    <button onclick="resetImageBounds()" style="background:#ff6b6b; color:white; margin-bottom:5px;">🔁 Reset</button>
-    <br>
-    <button id="btn-snapshot" onclick="takeSnapshot()" disabled style="background:#4CAF50; color:white; padding: 5px 10px; cursor:not-allowed; opacity:0.6;">⏳ Loading...</button>
+  <div style="display:flex; flex-direction:column; gap:5px;">
+    <button onclick="resetImageBounds()" style="background:#ff6b6b; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:12px; font-weight:bold;">🔁 Reset View</button>
+    <button id="btn-snapshot" onclick="takeSnapshot()" disabled style="background:#4CAF50; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:not-allowed; opacity:0.6; font-size:12px; font-weight:bold;">⏳ Snapshot</button>
   </div>
 </div>
 
@@ -342,8 +315,8 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     <!-- Gradient Scale -->
     <div style="margin-top:8px; margin-bottom:8px;">
         <div style="display:flex; justify-content:space-between; font-size:10px; color:#555; margin-bottom:0px;">
-            <span>Min</span>
-            <span>Max</span>
+            <span>Low</span>
+            <span>High</span>
         </div>
         <div style="display:flex; justify-content:space-between; font-size:11px; font-weight:bold; margin-bottom:2px;">
             <span>{min_str}</span>
@@ -622,12 +595,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
 </div>
 
 
-<!-- Optional: Input for Attachment Title in Controls -->
-<div id="footer-controls" style="position: absolute; top: 350px; right: 10px; z-index: 9999; background: rgba(255,255,255,0.9); padding: 5px; border-radius: 4px; font-size: 11px; width: 200px;">
-    <strong>Footer Settings</strong><br>
-    <label>Figure Title:</label>
-    <input type="text" id="input-attachment-title" value="{pd_safe['attachment_title']}" style="width: 100%; margin-top:2px;" oninput="document.getElementById('footer-attachment-title').innerText = this.value">
-</div>
+
 
 <!-- Debug Status -->
 <div id="js-status" style="position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:red; color:white; padding:20px; z-index:10000; font-size:24px; font-weight:bold; border: 4px solid white; pointer-events:none; opacity: 0.8;">
@@ -1236,10 +1204,225 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
       }}, 500); 
   }};
 
+  // --- Label Solver (Force Directed) ---
+  // --- Label Solver (Force Directed) ---
+  class LabelSolver {{
+    constructor(map) {{
+        this.map = map;
+        this.nodes = [];
+        this.isBusy = false;
+        
+        // Container for lines (SVG)
+        this.svgContainer = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        this.svgContainer.style.position = 'absolute';
+        this.svgContainer.style.top = '0';
+        this.svgContainer.style.left = '0';
+        this.svgContainer.style.width = '100%';
+        this.svgContainer.style.height = '100%';
+        this.svgContainer.style.pointerEvents = 'none';
+        this.svgContainer.style.zIndex = '400'; 
+        this.map.getContainer().appendChild(this.svgContainer);
+    }}
+
+    add(labelEl, marker) {{
+        // Create Halo Line (White Background - Thick)
+        const lineBg = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        lineBg.setAttribute("stroke", "white");
+        lineBg.setAttribute("stroke-width", "4");
+        lineBg.setAttribute("stroke-opacity", "0.8");
+        lineBg.setAttribute("stroke-linecap", "round");
+        this.svgContainer.appendChild(lineBg);
+
+        // Create Main Line (Black/Dark Foreground - Thin)
+        const lineFg = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        lineFg.setAttribute("stroke", "black");
+        lineFg.setAttribute("stroke-width", "1.5");
+        lineFg.setAttribute("stroke-opacity", "0.9");
+        this.svgContainer.appendChild(lineFg);
+
+        this.nodes.push({{
+            label: labelEl,
+            marker: marker,
+            lineBg: lineBg,
+            lineFg: lineFg,
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            fx: 0,
+            fy: 0
+        }});
+    }}
+    
+    // Main loop
+    update() {{
+        if (this.isBusy) return;
+        this.isBusy = true;
+        
+        const padding = 5; // Increased padding used in collision
+        const force_iterations = 60; // High iterations to solve dense clusters
+
+        // 1. Update targets (where they WANT to be) & Dimensions
+        this.nodes.forEach(node => {{
+            const pt = this.map.latLngToContainerPoint(node.marker.getLatLng());
+            node.targetX = pt.x + 14; 
+            node.targetY = pt.y;
+            node.anchorX = pt.x;
+            node.anchorY = pt.y;
+
+            if (!node.width) {{
+                node.width = node.label.offsetWidth;
+                node.height = node.label.offsetHeight;
+            }}
+            
+            // Initial reset if way off
+            if (!node.x || Math.abs(node.x - node.targetX) > 1000) {{
+                node.x = node.targetX;
+                node.y = node.targetY;
+            }}
+        }});
+
+        // 2. Physics Loop
+        for (let k = 0; k < force_iterations; k++) {{
+            this.nodes.forEach(a => {{
+                a.fx = 0;
+                a.fy = 0;
+
+                // A. Gravity: Weak Attraction to target (Allows drifting to find space)
+                const dx = a.targetX - a.x;
+                const dy = a.targetY - a.y;
+                a.fx += dx * 0.05; // Weak spring (was 0.3)
+                a.fy += dy * 0.05;
+                
+                // B. Obstacles: Repulsion from ALL Markers (Prevent covering ANY dot)
+                const safeR = 12; // Marker radius buffer
+                this.nodes.forEach(m => {{
+                    const mx = m.anchorX;
+                    const my = m.anchorY;
+
+                    // Label 'a' geometry
+                    const lx1 = a.x;
+                    const lx2 = a.x + a.width;
+                    const ly1 = a.y - a.height/2;
+                    const ly2 = a.y + a.height/2;
+                    
+                    // Box collision check
+                    if (lx1 < mx + safeR && lx2 > mx - safeR && 
+                        ly1 < my + safeR && ly2 > my - safeR) {{
+                         
+                        // Push away from marker center
+                        const cx = a.x + a.width/2;
+                        const cy = a.y;
+                        let vx = cx - mx;
+                        let vy = cy - my;
+                        
+                        // Jitter if perfectly centered
+                        if (Math.abs(vx) < 1 && Math.abs(vy) < 1) {{
+                            vx = 10; vy = (Math.random()-0.5)*10;
+                        }}
+                        
+                        const len = Math.sqrt(vx*vx + vy*vy) || 1;
+                        const push = 2.0; // Hard push
+                        a.fx += (vx/len) * push;
+                        a.fy += (vy/len) * push;
+                    }}
+                }});
+
+                // C. Collision: Repulsion from other Labels
+                this.nodes.forEach(b => {{
+                    if (a === b) return;
+                    
+                    const ax1 = a.x, ax2 = a.x + a.width;
+                    const ay1 = a.y - a.height/2, ay2 = a.y + a.height/2;
+                    
+                    const bx1 = b.x, bx2 = b.x + b.width;
+                    const by1 = b.y - b.height/2, by2 = b.y + b.height/2;
+
+                    if (ax1 < bx2 + padding && ax2 > bx1 - padding && 
+                        ay1 < by2 + padding && ay2 > by1 - padding) {{
+                        
+                        const acx = a.x + a.width/2;
+                        const acy = a.y;
+                        const bcx = b.x + b.width/2;
+                        const bcy = b.y;
+                        
+                        let vx = acx - bcx;
+                        let vy = acy - bcy;
+                        
+                        if (Math.abs(vx) < 0.1 && Math.abs(vy) < 0.1) {{
+                             vx = (Math.random() - 0.5);
+                             vy = (Math.random() - 0.5);
+                        }}
+                        
+                        const dist = Math.sqrt(vx*vx + vy*vy) || 1;
+                        const push = 5.0; // Strong push (was 3.0)
+                        a.fx += (vx / dist) * push;
+                        a.fy += (vy / dist) * push;
+                    }}
+                }});
+            }});
+
+            // Apply forces
+            this.nodes.forEach(node => {{
+                node.x += node.fx;
+                node.y += node.fy;
+            }});
+        }}
+
+        // 3. Render
+        this.nodes.forEach(node => {{
+            node.label.style.transform = `translate3d(${{node.x}}px, ${{node.y - node.height/2}}px, 0)`;
+            
+            // ALWAYS Draw Lines (Universal Halo)
+            const distSq = (node.x - node.anchorX)**2 + (node.y - node.anchorY)**2;
+            
+            if (distSq > 4) {{ 
+                // Background (Halo)
+                node.lineBg.setAttribute("x1", node.anchorX);
+                node.lineBg.setAttribute("y1", node.anchorY);
+                node.lineBg.setAttribute("x2", node.x); 
+                node.lineBg.setAttribute("y2", node.y); 
+                node.lineBg.style.display = 'block';
+
+                // Foreground
+                node.lineFg.setAttribute("x1", node.anchorX);
+                node.lineFg.setAttribute("y1", node.anchorY);
+                node.lineFg.setAttribute("x2", node.x); 
+                node.lineFg.setAttribute("y2", node.y);
+                node.lineFg.style.display = 'block';
+            }} else {{
+                node.lineBg.style.display = 'none';
+                node.lineFg.style.display = 'none';
+            }}
+        }});
+
+        this.isBusy = false;
+    }}
+
+  }}
+
   // --- Interactive Dots Logic ---
+  let solver = null;
+
   function initDots() {{
       const m = findMap();
       if (!m) return;
+      
+      // Init Solver
+      if (!solver) solver = new LabelSolver(m);
+
+      // Create Label Container (if not exists)
+      let labelLayer = document.getElementById('label-layer');
+      if (!labelLayer) {{
+          labelLayer = document.createElement('div');
+          labelLayer.id = 'label-layer';
+          labelLayer.style.position = 'absolute';
+          labelLayer.style.top = '0';
+          labelLayer.style.left = '0';
+          labelLayer.style.pointerEvents = 'none'; // Let clicks pass through to map
+          labelLayer.style.zIndex = '450';
+          m.getContainer().appendChild(labelLayer);
+      }}
       
       // 1. Add KMZ Points (Blue - Fixed/Non-draggable)
       bluePoints.forEach((pt, idx) => {{
@@ -1275,26 +1458,56 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
           
           marker.bindPopup(popupContent);
           
-          // Permanent label with short ID
-          marker.bindTooltip(shortId, {{
-              permanent: true,
-              direction: 'right',
-              className: 'borewell-label',
-              offset: [10, 0]
-          }});
+          // --- NEW: Dynamic Label (Div) instead of Tooltip ---
+          const labelEl = document.createElement('div');
+          labelEl.className = 'borewell-label'; // Reuse existing style
+          labelEl.innerText = shortId;
+          labelEl.style.position = 'absolute';
+          labelEl.style.whiteSpace = 'nowrap';
+          labelEl.style.willChange = 'transform';
+          // Ensure styles are set for calculation
+          labelEl.style.background = '#FFFFFF';
+          labelEl.style.border = '1px solid #000000';
+          labelEl.style.borderLeft = '5px solid #FF6B35'; // Visual Link to Orange Marker
+          labelEl.style.padding = '1px 4px';
+          labelEl.style.fontWeight = 'bold';
+          labelEl.style.fontSize = '11px';
+          labelEl.style.fontFamily = 'Arial, sans-serif';
+          labelEl.style.top = '0';
+          labelEl.style.left = '0';
+          
+          labelLayer.appendChild(labelEl);
+          
+          // Add to solver
+          solver.add(labelEl, marker);
           
           // Update popup on drag
           marker.on('drag', function(e) {{
               const latlng = e.target.getLatLng();
               marker.setPopupContent(`<b>${{fullName}} (Dragging...)</b><br>ID: ${{pt.id}}<br>Lat: ${{latlng.lat.toFixed(6)}}<br>Lon: ${{latlng.lng.toFixed(6)}}<br><b>${{paramLabel}}</b>: ${{valDisplay}}`);
+              // Trigger solver update
+              requestAnimationFrame(() => solver.update());
           }});
           
           marker.on('dragend', function(e) {{
               const latlng = e.target.getLatLng();
               marker.setPopupContent(`<b>${{fullName}}</b><br>ID: ${{pt.id}}<br>Lat: ${{latlng.lat.toFixed(6)}}<br>Lon: ${{latlng.lng.toFixed(6)}}<br><b>${{paramLabel}}</b>: ${{valDisplay}}`);
               console.log(`Borewell ${{shortId}} moved to: [${{latlng.lat}}, ${{latlng.lng}}]`);
+              solver.update();
           }});
       }});
+      
+      // Hook up Solver to Map Events
+      m.on('zoom', () => requestAnimationFrame(() => solver.update()));
+      m.on('zoomend', () => requestAnimationFrame(() => solver.update()));
+      m.on('move', () => requestAnimationFrame(() => solver.update()));
+      m.on('moveend', () => requestAnimationFrame(() => solver.update()));
+      
+      // Initial Solve
+      setTimeout(() => {{
+          // Run a few times to settle
+          for(let i=0; i<5; i++) solver.update();
+      }}, 500);
   }}
 
   // --- Initialization: find overlay + hooks to reapply on map/overlay events ---

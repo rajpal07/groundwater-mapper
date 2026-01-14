@@ -169,9 +169,27 @@ if st.session_state['processed_data'] is not None:
     st.header("3. Map Settings")
     
     # Filter columns to only numeric/interesting ones
-    # Exclude metadata
-    exclude = ['Well ID', 'Date', 'Time', 'Easting', 'Northing', 'MGA2020 / MGA Zone 54', 'Unknown']
-    available_cols = [c for c in df.columns if c not in exclude]
+    # Define keywords to exclude (case-insensitive)
+    exclude_keywords = [
+        'sample date', 
+        'time', 
+        'date', 
+        'easting', 
+        'northing', 
+        'lati', 
+        'longi', 
+        'comments', 
+        'well id',
+        'mga2020',
+        'unknown'
+    ]
+    
+    available_cols = []
+    for c in df.columns:
+        c_lower = str(c).lower()
+        # Check if any forbidden keyword is in the column name
+        if not any(keyword in c_lower for keyword in exclude_keywords):
+            available_cols.append(c)
     
     # Default to Groundwater if available
     default_idx = 0
