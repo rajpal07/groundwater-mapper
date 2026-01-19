@@ -13,7 +13,7 @@ import src.geo as geo
 import src.data as data
 import src.visualization as viz
 import src.templates as templates
-import os
+
 import pandas as pd
 from src.sheet_agent import SheetAgent
 import uuid
@@ -60,6 +60,7 @@ with st.sidebar:
     
     excel_file = st.file_uploader("Upload Excel File (.xlsx)", type=["xlsx", "xls"])
     # KMZ upload removed as per request
+    kmz_points = None
     
     # Validation Warning in Sidebar if Key missing
     if not api_key:
@@ -188,9 +189,46 @@ if st.session_state['processed_data'] is not None:
     for c in df.columns:
         c_lower = str(c).lower()
         # Check if any forbidden keyword is in the column name
-        if not any(keyword in c_lower for keyword in exclude_keywords):
-            available_cols.append(c)
+        if any(keyword in c_lower for keyword in exclude_keywords):
+            continue
+            
+        # Check if column is empty (all NaNs) or contains no valid numeric data
+        # We coerce to numeric first to handle empty strings or non-numeric text like "ND"
+        # FIX: Only check rows where 'Well ID' is present to ignore metadata/colored rows
+        
+        # Try to find Well ID column (case insensitive)
+        well_id_col = next((col for col in df.columns if str(col).lower() == 'well id'), None)
+        
+        check_series = df[c]
+        if well_id_col:
+             # STRICT FILTER: 
+             # 1. Well ID must not be NaN
+             # 2. Well ID must not be 'Units' or 'LOR'
+             # 3. Well ID must be short (e.g. < 20 chars) to exclude "Water Dependent Ecosystems..." text
+             
+             def is_valid_well_id(val):
+                 if pd.isna(val): return False
+                 s = str(val).strip()
+                 if len(s) > 20: return False # Likely a description header
+                 if s.lower() in ['units', 'lor', 'guideline', 'trigger values']: return False
+                 return True
+             
+             valid_rows_mask = df[well_id_col].apply(is_valid_well_id)
+             check_series = df.loc[valid_rows_mask, c]
+
+        # Check for censored values (e.g., "<1", ">5") - DISABLED by user request
+        # censored_mask = check_series.astype(str).str.strip().str.match(r'^[<>]')
+        # if censored_mask.any():
+        #      continue
+
+        # Check if column is empty (all NaNs) or contains no valid numeric data
+        if pd.to_numeric(check_series, errors='coerce').count() == 0:
+            continue
+            
+        available_cols.append(c)
     
+
+
     # Default to Groundwater if available
     default_idx = 0
     if "Static Water Level (mAHD)" in available_cols:
@@ -256,17 +294,20 @@ if st.session_state['processed_data'] is not None:
                 
                 m.save(OUTPUT_MAP_PATH_UNIQUE)
                 # Default Project Details (Configurable)
+                from datetime import datetime
+                today_str = datetime.now().strftime("%d-%m-%Y")
+                
                 project_details = {
-                    "attachment_title": "Attachment 1, Figure 1 – Site Location Plan",
-                    "general_notes": "The aerial map is provided for illustrative purpose and may not reflect current site conditions.\\nBoundaries, dimensions and area shown on this plan are approximate only and subject to survey.",
-                    "drawn_by": "LC",
-                    "project": "BENDIGO LIVESTOCK\\nEXCHANGE - WALLENJOE ROAD\\nHUNTLY VICTORIA",
-                    "address": "11 MATCHETT DRIVE STRATHDALE, VICTORIA, 3550.\\nPH: (03) 5406 0522 admin@edwardsenvironmental.com.au",
-                    "drawing_title": "SITE MAP",
-                    "authorised_by": "DE",
-                    "date": "24-02-2023",
-                    "client": "CITY OF GREATER BENDIGO",
-                    "job_no": "#773-01"
+                    "attachment_title": "",
+                    "general_notes": "The aerial map is provided for illustrative purpose and may not reflect current site conditions.Boundaries, dimensions and area shown on this plan are approximate only and subject to survey.",
+                    "drawn_by": "",
+                    "project": "",
+                    "address": "",
+                    "drawing_title": "",
+                    "authorised_by": "",
+                    "date": today_str,
+                    "client": "",
+                    "job_no": ""
                 }
                 
                 # Calculate Min/Max for Legend
@@ -285,7 +326,7 @@ if st.session_state['processed_data'] is not None:
                     OUTPUT_MAP_PATH_UNIQUE, 
                     image_bounds, 
                     target_points, 
-                    kmz_points, 
+                    kmz_points=None, 
                     legend_label=selected_param, 
                     colormap=selected_cmap, 
                     project_details=project_details,

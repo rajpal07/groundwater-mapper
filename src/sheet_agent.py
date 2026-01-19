@@ -206,12 +206,13 @@ class SheetAgent:
             
         df.columns = new_cols
         
-        # 2. Ensure Numeric
-        # Exclude metadata columns
-        exclude_cols = ['Well ID', 'Date', 'Time', 'Sample ID', 'Comments']
-        for c in df.columns:
-            if c not in exclude_cols:
-                df[c] = pd.to_numeric(df[c], errors='coerce')
+        # 2. Ensure Numeric - DISABLED
+        # We generally want to preserve data as-is (e.g. "<5", "ND") to allow downstream apps to handle it.
+        # Coercing to numeric here destroys valuable information (censorship) and breaks the "censored column" filter.
+        # exclude_cols = ['Well ID', 'Date', 'Time', 'Sample ID', 'Comments']
+        # for c in df.columns:
+        #     if c not in exclude_cols:
+        #         df[c] = pd.to_numeric(df[c], errors='coerce')
                 
         return df
 
@@ -253,10 +254,14 @@ class SheetAgent:
              print(f"Auto-detected sheets: {selected_sheets}")
         
         for sheet in selected_sheets:
-            df_sheet = self.smart_extract_sheet(sheet, file_path)
-            if not df_sheet.empty:
-                cleaned_df = self.clean_sheet_data(df_sheet)
-                dfs.append((sheet, cleaned_df))
+            try:
+                df_sheet = self.smart_extract_sheet(sheet, file_path)
+                if not df_sheet.empty:
+                    cleaned_df = self.clean_sheet_data(df_sheet)
+                    dfs.append((sheet, cleaned_df))
+            except Exception as e:
+                print(f"Error processing sheet '{sheet}': {e}")
+                continue
 
         if not dfs:
              print("No data extracted from any sheet.")

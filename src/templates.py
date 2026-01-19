@@ -101,8 +101,26 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     initial_center_json = json.dumps(initial_center)
 
     # Format min/max for display if provided
-    min_str = f"{min_val:.2f}" if isinstance(min_val, (int, float)) else "Low"
-    max_str = f"{max_val:.2f}" if isinstance(max_val, (int, float)) else "High"
+    # Handle NaN checks (val == val is False for NaN)
+    min_str = f"{min_val:.2f}" if isinstance(min_val, (int, float)) and min_val == min_val else "Low"
+    max_str = f"{max_val:.2f}" if isinstance(max_val, (int, float)) and max_val == max_val else "High"
+
+    # Load static logo from assets directory
+    import base64
+    import os
+    
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'assets', 'cts_logo.png')
+    # print(f"DEBUG: Looking for logo at: {logo_path}")
+    
+    logo_html_str = ""
+    if os.path.exists(logo_path):
+        # print("DEBUG: Logo file found!")
+        with open(logo_path, 'rb') as f:
+            logo_base64 = base64.b64encode(f.read()).decode('utf-8')
+        logo_html_str = f'<img src="data:image/png;base64,{logo_base64}" class="logo-img" alt="Project Logo">'
+    else:
+        # print("DEBUG: Logo file NOT found!")
+        logo_html_str = '<div style="text-align:center; color:#ccc;"><div style="font-size:12px;">(Logo Missing)</div></div>'
 
     controls_html = f"""
 <!-- Force Hide Leaflet Controls -->
@@ -257,7 +275,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
 <div id="map-controls" style="position:fixed; top:10px; right:10px; z-index:100000 !important; background:rgba(255,255,255,0.95); padding:10px; border-radius:6px; font-family:Arial,Helvetica,sans-serif; pointer-events:auto; box-shadow: 0 0 5px rgba(0,0,0,0.2);">
   <div style="margin-bottom:10px;">
     <label style="font-size:11px; font-weight:bold; display:block; margin-bottom:3px; color:#333;">Figure Title:</label>
-    <input type="text" id="input-attachment-title" value="{pd_safe['attachment_title']}" style="width: 130px; padding:3px; font-size:11px; border:1px solid #ccc; border-radius:3px;" oninput="document.getElementById('footer-attachment-title').innerText = this.value">
+    <input type="text" id="input-attachment-title" value="{pd_safe['attachment_title']}" style="width: 130px; padding:3px; font-size:11px; border:1px solid #ccc; border-radius:3px;" oninput="document.querySelectorAll('.footer-attachment-title-val').forEach(el => el.innerText = this.value)">
   </div>
 
   <div style="display:flex; flex-direction:column; gap:5px;">
@@ -338,30 +356,57 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
     </div>
   </div>
 </div>
-"""
 
-    # Load static logo from assets directory
-    import base64
-    import os
-    
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'assets', 'cts_logo.png')
-    print(f"DEBUG: Looking for logo at: {logo_path}")
-    
-    logo_html_str = ""
-    if os.path.exists(logo_path):
-        print("DEBUG: Logo file found!")
-        with open(logo_path, 'rb') as f:
-            logo_base64 = base64.b64encode(f.read()).decode('utf-8')
-        logo_html_str = f'<img src="data:image/png;base64,{logo_base64}" class="logo-img" alt="Project Logo">'
-    else:
-        print("DEBUG: Logo file NOT found!")
-        # Try finding any jpeg in assets as fallback?
-        # Listing dir to debug
-        assets_dir = os.path.dirname(logo_path)
-        if os.path.exists(assets_dir):
-            print(f"DEBUG: Assets dir content: {os.listdir(assets_dir)}")
+<!-- Hidden Footer for Snapshots -->
+<div id="snapshot-footer">
+    <div class="footer-container">
+
+        <!-- CELL 1: NOTES -->
+        <div class="footer-cell cell-notes">
+            <div style="font-weight:bold; margin-bottom:4px; text-decoration: underline;">GENERAL NOTES:</div>
+            <div style="white-space: pre-wrap;">{pd_safe['general_notes']}</div>
+            <div style="position: absolute; bottom: 5px; left: 8px; font-size: 10px; color: #555;">
+               SOURCE: NEARMAP {pd_safe["date"]}
+            </div>
+        </div>
         
-        logo_html_str = '<div style="text-align:center; color:#ccc;"><div style="font-size:12px;">(Logo Missing)</div></div>'
+        <!-- CELL 2: LOGO -->
+        <div class="footer-cell cell-logo">
+             {logo_html_str}
+        </div>
+        
+        <!-- CELL 3: DETAILS -->
+        <div class="footer-cell cell-details">
+            <!-- Row 0 -->
+            <div class="footer-label">Figure Title:</div>
+            <div class="footer-value footer-attachment-title-val" style="font-weight:bold;">{pd_safe['attachment_title']}</div>
+            <!-- Row 1 -->
+            <div class="footer-label">Client:</div>
+            <div class="footer-value"><strong>{pd_safe['client']}</strong></div>
+            <!-- Row 2 -->
+            <div class="footer-label">Project:</div>
+            <div class="footer-value">{pd_safe['project']}</div>
+            <!-- Row 3 -->
+            <div class="footer-label">Location:</div>
+            <div class="footer-value">{pd_safe['address']}</div>
+            <!-- Row 4 -->
+            <div class="footer-label">Drawing Title:</div>
+            <div class="footer-value" style="font-weight:bold;">{pd_safe['drawing_title']}</div>
+            <!-- Row 5 -->
+            <div class="footer-label">Drawn:</div>
+            <div class="footer-value">{pd_safe['drawn_by']}</div>
+            <div class="footer-label">Project No:</div>
+            <div class="footer-value">{pd_safe['job_no']}</div>
+            <div class="footer-label">Date:</div>
+            <div class="footer-value">{pd_safe['date']}</div>
+            <div class="footer-label">Figure No:</div>
+            <div class="footer-value">1 Rev. A</div>
+            <div class="footer-label">Auth:</div>
+            <div class="footer-value">{pd_safe['authorised_by']}</div>
+        </div>
+    </div>
+</div>
+"""
 
 
     footer_html = f'''
@@ -373,9 +418,9 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         <!-- CELL 1: GENERAL NOTES -->
         <div class="footer-cell cell-notes">
             <div style="font-weight:bold; margin-bottom:4px; text-decoration: underline;">GENERAL NOTES:</div>
-            <div>{{pd_safe["general_notes"]}}</div>
+            <div style="white-space: pre-wrap;">{pd_safe["general_notes"]}</div>
              <div style="position: absolute; bottom: 5px; left: 8px; font-size: 10px; color: #555;">
-               SOURCE: NEARMAP {{pd_safe["date"]}} <!-- Placeholder source -->
+               SOURCE: NEARMAP {pd_safe["date"]} <!-- Placeholder source -->
             </div>
         </div>
         
@@ -387,32 +432,36 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
         
         <!-- CELL 3: DETAILS -->
         <div class="footer-cell cell-details">
+             <!-- Row 0: Attachment Title (Figure Title) -->
+            <div class="footer-label">Figure Title:</div>
+            <div class="footer-value footer-attachment-title-val" id="footer-attachment-title" style="font-weight:bold; font-size:11px;">{pd_safe["attachment_title"]}</div>
+
             <!-- Row 1 -->
             <div class="footer-label">Client:</div>
-            <div class="footer-value"><strong>{{pd_safe["client"]}}</strong></div>
+            <div class="footer-value"><strong>{pd_safe["client"]}</strong></div>
             
             <!-- Row 2 -->
             <div class="footer-label">Project:</div>
-            <div class="footer-value">{{pd_safe["project"]}}</div>
+            <div class="footer-value">{pd_safe["project"]}</div>
             
             <!-- Row 3 -->
             <div class="footer-label">Location:</div>
-            <div class="footer-value">{{pd_safe["address"]}}</div>
+            <div class="footer-value">{pd_safe["address"]}</div>
             
             <!-- Row 4 -->
             <div class="footer-label">Drawing Title:</div>
-            <div class="footer-value" style="font-size:11px; font-weight:bold;">{{pd_safe["drawing_title"]}}</div>
+            <div class="footer-value" style="font-size:11px; font-weight:bold;">{pd_safe["drawing_title"]}</div>
             
              <!-- Row 5 (Split grid for Drawn/ProjectNo) -->
              <!-- Making it simple rows for reliability -->
             <div class="footer-label">Drawn:</div>
-            <div class="footer-value">{{pd_safe["drawn_by"]}}</div>
+            <div class="footer-value">{pd_safe["drawn_by"]}</div>
             
             <div class="footer-label">Project No:</div>
-            <div class="footer-value">{{pd_safe["job_no"]}}</div>
+            <div class="footer-value">{pd_safe["job_no"]}</div>
             
             <div class="footer-label">Date:</div>
-            <div class="footer-value">{{pd_safe["date"]}}</div>
+            <div class="footer-value">{pd_safe["date"]}</div>
             
             <div class="footer-label">Figure No:</div>
             <div class="footer-value">1 Rev. A</div>
@@ -539,60 +588,7 @@ def inject_controls_to_html(html_file, image_bounds, target_points, kmz_points=N
 
 {controls_html}
 
-<!-- Hidden Footer Template -->
-<div id="snapshot-footer">
-    <div class="footer-container">
-        <!-- CELL 1: GENERAL NOTES -->
-        <div class="footer-cell cell-notes">
-            <div style="font-weight:bold; margin-bottom:4px; text-decoration: underline; font-size: 11px;">GENERAL NOTES:</div>
-            <div style="white-space: pre-wrap;">{{pd_safe['general_notes']}}</div>
-            
-             <div style="margin-top: auto; font-weight: bold; font-size: 11px;">
-               SOURCE: NEARMAP {{pd_safe['date']}}
-            </div>
-        </div>
-        
-        <!-- CELL 2: LOGO -->
-        <div class="footer-cell cell-logo">
-             {logo_html_str}
-        </div>
-        
-        <!-- CELL 3: DETAILS -->
-        <div class="footer-cell cell-details">
-            <!-- Row 1 -->
-            <div class="footer-label">Client:</div>
-            <div class="footer-value" style="font-weight:bold;">{{pd_safe['client']}}</div>
-            
-            <!-- Row 2 -->
-            <div class="footer-label">Project:</div>
-            <div class="footer-value">{{pd_safe['project']}}</div>
-            
-            <!-- Row 3 -->
-            <div class="footer-label">Location:</div>
-            <div class="footer-value">{{pd_safe['address']}}</div>
-            
-            <!-- Row 4 -->
-            <div class="footer-label">Drawing Title:</div>
-            <div class="footer-value" style="font-size:12px; font-weight:bold;">{{pd_safe['drawing_title']}}</div>
-            
-            <!-- Row 5 -->
-            <div class="footer-label">Drawn:</div>
-            <div class="footer-value">{{pd_safe['drawn_by']}}</div>
-            
-            <!-- Row 6 -->
-            <div class="footer-label">Project No:</div>
-            <div class="footer-value">{{pd_safe['job_no']}}</div>
-            
-            <!-- Row 7 -->
-            <div class="footer-label">Date:</div>
-            <div class="footer-value">{{pd_safe['date']}}</div>
-            
-            <!-- Row 8 -->
-            <div class="footer-label">Figure No:</div>
-            <div class="footer-value" style="font-weight:bold;">1 Rev. A</div>
-        </div>
-    </div>
-</div>
+
 
 
 

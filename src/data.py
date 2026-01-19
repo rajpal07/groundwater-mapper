@@ -36,16 +36,16 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
         
     df.columns = df.columns.str.strip()
 
-    # Filter data (same logic as original)
-    if 'Name' in df.columns and df['Name'].astype(str).str.contains('TOC1', na=False).any():
-        df = df[df['Name'].str.contains('TOC1', na=False)].copy()
+    # Filter data (same logic as original) - DISABLED by user request to prevent data hiding
+    # if 'Name' in df.columns and df['Name'].astype(str).str.contains('TOC1', na=False).any():
+    #     df = df[df['Name'].str.contains('TOC1', na=False)].copy()
 
     target_col = value_column
     if target_col not in df.columns:
         raise ValueError(f"Column '{target_col}' not found in data.")
 
     df = df[df[target_col].notna()]
-    df = df[df[target_col].notna()]
+
     df = df[df[target_col] != '-']
 
     # --- Coordinate Mapping for separate formats ---
@@ -82,6 +82,9 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
 
     if df.empty:
         raise ValueError("No valid data found in Excel file.")
+        
+    if len(df) < 3:
+        raise ValueError(f"Insufficient data points for interpolation. Found {len(df)}, need at least 3.")
 
     # Auto-detect UTM zone using enhanced algorithm
     transformer = None

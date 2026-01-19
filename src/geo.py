@@ -195,10 +195,12 @@ def auto_detect_utm_zone(df, reference_points=None):
 
 def extract_kmz_points(kmz_file):
     """
-    Extracts points from a KMZ file.
+    Extracts points from a KMZ file using standard libraries.
     Returns:
         - points: List of shapely Points (lon, lat)
     """
+    import xml.etree.ElementTree as ET
+    
     # KMZ is a zip
     with ZipFile(kmz_file, 'r') as kmz:
         # Find KML
@@ -207,15 +209,34 @@ def extract_kmz_points(kmz_file):
             raise ValueError("No .kml file found in KMZ")
         
         with kmz.open(kml_filename, 'r') as f:
-            root = parser.parse(f).getroot()
+            # Read bytes and parse
+            tree = ET.parse(f)
+            root = tree.getroot()
 
-    ns = {'kml': 'http://www.opengis.net/kml/2.2'}
-    placemarks = root.xpath('.//kml:Placemark[kml:Point]', namespaces=ns)
+    # KML namespace usually requires handling
+    # Namespaces are often {http://www.opengis.net/kml/2.2}
+    # We can strip namespaces or use them. Stripping is easier for simple extraction.
     
     points = []
-    for pm in placemarks:
-        coords = pm.Point.coordinates.text.strip()
-        lon, lat, *_ = map(float, coords.split(','))
-        points.append(Point(lon, lat))
-        
+    
+    # Tiny helper to find all Placemarks
+    # We'll just iterate all elements to find 'coordinates' inside 'Point'
+    # This is rough but robust against namespace variations
+    
+    for elem in root.iter():
+        if elem.tag.endswith('Point'):
+            # Look for coordinates child
+            for child in elem:
+                if child.tag.endswith('coordinates'):
+                     coords_text = child.text.strip()
+                     # KML coords: lon,lat,alt
+                     parts = coords_text.split(',')
+                     if len(parts) >= 2:
+                         try:
+                             lon = float(parts[0])
+                             lat = float(parts[1])
+                             points.append(Point(lon, lat))
+                         except ValueError:
+                             pass
+                             
     return points
