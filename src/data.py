@@ -380,13 +380,27 @@ def _process_single_layer(df, use_utm, transformer, target_col,
         target_lons = df['Longitude'].values
         target_lats = df['Latitude'].values
     
+    # Optimized target_points generation (Vectorized access)
+    # Avoid df.iloc[i] inside loop to remove Series creation overhead
+    
+    # Pre-extract names
+    if 'Well ID' in df.columns:
+        names = df['Well ID'].astype(str).tolist()
+    elif 'Name' in df.columns:
+        names = df['Name'].astype(str).tolist()
+    else:
+        names = [f"Point {i}" for i in range(len(df))]
+        
+    # Pre-extract values
+    values = df[target_col].tolist()
+    
     target_points = [
         {
             "lat": lat, 
             "lon": lon, 
             "id": i,
-            "name": get_point_name(df.iloc[i], i),
-            "value": df.iloc[i][target_col]
+            "name": names[i],
+            "value": values[i]
         } 
         for i, (lat, lon) in enumerate(zip(target_lats, target_lons))
     ]
