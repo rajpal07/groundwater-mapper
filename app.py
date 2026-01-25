@@ -1,4 +1,17 @@
 import streamlit as st
+
+# --- CRITICAL HACK: Global fix for geemap/IPython compatibility ---
+# Must run before ANY imports of geemap or other libraries
+try:
+    import IPython.core.display
+    if not hasattr(IPython.core.display, 'display'):
+        from IPython.display import display, HTML
+        IPython.core.display.display = display
+        IPython.core.display.HTML = HTML
+except (ImportError, AttributeError):
+    pass
+# ------------------------------------------------------------------
+
 import sys
 import os
 import warnings
@@ -134,7 +147,7 @@ if excel_file and api_key:
                         
                         if result_path and os.path.exists(result_path):
                             # Load into Session State
-                            df = pd.read_excel(result_path)
+                            df = data.load_excel_file(result_path)
                             st.session_state['processed_data'] = df
                             st.session_state['processed_source'] = excel_file.name
                             st.session_state['current_job_id'] = job_id
@@ -269,7 +282,7 @@ if st.session_state['processed_data'] is not None:
                 # OPTIMIZATION: Only generate contours for Groundwater/Elevation
                 should_generate_contours = any(x in selected_param for x in ["Water Level", "Elevation", "SWL", "mAHD"])
                 
-                image_base64, image_bounds, target_points, bbox_geojson = data.process_excel_data(
+                result = data.process_excel_data(
                     df, 
                     reference_points=kmz_points,
                     value_column=selected_param,
@@ -277,80 +290,109 @@ if st.session_state['processed_data'] is not None:
                     colormap=selected_cmap
                 )
                 
-                # 3. Create Map
-                m = viz.create_map(
-                    image_base64, 
-                    image_bounds, 
-                    target_points, 
-                    kmz_points, 
-                    bbox_geojson,
-                    legend_label=selected_param # Dynamic Legend
-                )
+                # Handle both single-layer and multi-layer outputs
+                if isinstance(result, list):
+                    # Multi-layer output from aquifer stratification
+                    layers = result
+                    st.success(f"🎯 Detected {len(layers)} aquifer layers! Generating separate maps...")
+                elif isinstance(result, dict):
+                    # Single-layer dict output
+                    layers = [result]
+                else:
+                    # Legacy tuple output (backward compatibility)
+                    image_base64, image_bounds, target_points, bbox_geojson = result
+                    layers = [{
+                        'layer_name': 'All Data',
+                        'image_base64': image_base64,
+                        'image_bounds': image_bounds,
+                        'target_points': target_points,
+                        'bbox_geojson': bbox_geojson
+                    }]
                 
-                # Save & Inject
-                # Use a unique filename to prevent caching issues
-                unique_id = str(uuid.uuid4())[:8]
-                OUTPUT_MAP_PATH_UNIQUE = f"generated_map_{unique_id}.html"
-                
-                m.save(OUTPUT_MAP_PATH_UNIQUE)
-                # Default Project Details (Configurable)
-                from datetime import datetime
-                today_str = datetime.now().strftime("%d-%m-%Y")
-                
-                project_details = {
-                    "attachment_title": "",
-                    "general_notes": "The aerial map is provided for illustrative purpose and may not reflect current site conditions.Boundaries, dimensions and area shown on this plan are approximate only and subject to survey.",
-                    "drawn_by": "",
-                    "project": "",
-                    "address": "",
-                    "drawing_title": "",
-                    "authorised_by": "",
-                    "date": today_str,
-                    "client": "",
-                    "job_no": ""
-                }
-                
-                # Calculate Min/Max for Legend
-                min_val = None
-                max_val = None
-                try:
-                    # Ensure numeric
-                    valid_series = pd.to_numeric(df[selected_param], errors='coerce').dropna()
-                    if not valid_series.empty:
-                        min_val = float(valid_series.min())
-                        max_val = float(valid_series.max())
-                except Exception as e:
-                    st.warning(f"Could not calculate range for legend: {e}")
-
-                templates.inject_controls_to_html(
-                    OUTPUT_MAP_PATH_UNIQUE, 
-                    image_bounds, 
-                    target_points, 
-                    kmz_points=None, 
-                    legend_label=selected_param, 
-                    colormap=selected_cmap, 
-                    project_details=project_details,
-                    min_val=min_val,
-                    max_val=max_val
-                )
-                
-                # Render
-                with open(OUTPUT_MAP_PATH_UNIQUE, 'r', encoding='utf-8') as f:
-                    map_html = f.read()
+                # Generate map for each layer
+                for i, layer in enumerate(layers):
+                    layer_name = layer.get('layer_name', 'All Data')
                     
-                st.download_button("📥 Download Map", map_html, f"groundwater_map_{selected_param}.html", "text/html")
-                
-                # Append unique ID to HTML to satisfy Streamlit's diffing (Forces refresh as content changed)
-                map_html_with_id = map_html + f"\n<!-- Job ID: {unique_id} -->"
-                
-                # Render (removed key arg which caused error)
-                st.components.v1.html(map_html_with_id, height=800, scrolling=True)
-                
-                # Clean up (Optional, but good practice to avoid clutter)
-                # try:
-                #    os.remove(OUTPUT_MAP_PATH_UNIQUE)
-                # except:
-                #    pass
+                    if len(layers) > 1:
+                        st.subheader(f"📍 {layer_name}")
+                    
+                    # 3. Create Map
+                    m = viz.create_map(
+                        layer['image_base64'], 
+                        layer['image_bounds'], 
+                        layer['target_points'], 
+                        kmz_points, 
+                        layer['bbox_geojson'],
+                        legend_label=selected_param # Dynamic Legend
+                    )
+                    
+                    # Save & Inject
+                    # Use a unique filename to prevent caching issues
+                    unique_id = str(uuid.uuid4())[:8]
+                    if len(layers) > 1:
+                        OUTPUT_MAP_PATH_UNIQUE = f"generated_map_{layer_name.replace(' ', '_')}_{unique_id}.html"
+                    else:
+                        OUTPUT_MAP_PATH_UNIQUE = f"generated_map_{unique_id}.html"
+                    
+                    m.save(OUTPUT_MAP_PATH_UNIQUE)
+                    # Default Project Details (Configurable)
+                    from datetime import datetime
+                    today_str = datetime.now().strftime("%d-%m-%Y")
+                    
+                    project_details = {
+                        "attachment_title": layer_name if len(layers) > 1 else "",
+                        "general_notes": "The aerial map is provided for illustrative purpose and may not reflect current site conditions.Boundaries, dimensions and area shown on this plan are approximate only and subject to survey.",
+                        "drawn_by": "",
+                        "project": "",
+                        "address": "",
+                        "drawing_title": "",
+                        "authorised_by": "",
+                        "date": today_str,
+                        "client": "",
+                        "job_no": ""
+                    }
+                    
+                    # Calculate Min/Max for Legend
+                    min_val = None
+                    max_val = None
+                    try:
+                        # Ensure numeric
+                        valid_series = pd.to_numeric(df[selected_param], errors='coerce').dropna()
+                        if not valid_series.empty:
+                            min_val = float(valid_series.min())
+                            max_val = float(valid_series.max())
+                    except Exception as e:
+                        st.warning(f"Could not calculate range for legend: {e}")
+
+                    templates.inject_controls_to_html(
+                        OUTPUT_MAP_PATH_UNIQUE, 
+                        layer['image_bounds'], 
+                        layer['target_points'], 
+                        kmz_points=None, 
+                        legend_label=selected_param, 
+                        colormap=selected_cmap, 
+                        project_details=project_details,
+                        min_val=min_val,
+                        max_val=max_val
+                    )
+                    
+                    # Render
+                    with open(OUTPUT_MAP_PATH_UNIQUE, 'r', encoding='utf-8') as f:
+                        map_html = f.read()
+                        
+                    st.download_button(f"📥 Download {layer_name} Map", map_html, f"groundwater_map_{layer_name.replace(' ', '_')}_{selected_param}.html", "text/html", key=f"download_{i}")
+                    
+                    # Append unique ID to HTML to satisfy Streamlit's diffing (Forces refresh as content changed)
+                    map_html_with_id = map_html + f"\n<!-- Job ID: {unique_id} -->"
+                    
+                    # Render (removed key arg which caused error)
+                    st.components.v1.html(map_html_with_id, height=800, scrolling=True)
+                    
+                    # Clean up (Optional, but good practice to avoid clutter)
+                    # try:
+                    #    os.remove(OUTPUT_MAP_PATH_UNIQUE)
+                    # except:
+                    #    pass
                 
             except Exception as e:
                 st.error(f"Map Generation Error: {e}")

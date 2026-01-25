@@ -12,7 +12,68 @@ def get_point_name(row, idx):
     if 'Name' in row: return str(row['Name'])
     return f"Point {idx}"
 
-def process_excel_data(file, interpolation_method='linear', reference_points=None, value_column='Groundwater Elevation mAHD', generate_contours=True, colormap='viridis'):
+def load_excel_file(file, sheet_name=0):
+    """
+    Robustly loads Excel file, handling variable header rows and sub-headers.
+    """
+    # Fix for BytesIO seeking (Streamlit file uploader)
+    if hasattr(file, 'seek'):
+        file.seek(0)
+    
+    # Scan for header in first 20 rows
+    try:
+        temp_df = pd.read_excel(file, sheet_name=sheet_name, header=None, nrows=20)
+    except Exception:
+        # Fallback
+        if hasattr(file, 'seek'): file.seek(0)
+        return pd.read_excel(file, sheet_name=sheet_name)
+        
+    header_idx = 0
+    # Search for "Well ID" or "Bore Name"
+    for i, row in temp_df.iterrows():
+        row_str = row.astype(str).str.lower().tolist()
+        if any('well id' in s for s in row_str) or any('bore name' in s for s in row_str):
+            header_idx = i
+            break
+            
+    # Read with correct header
+    if hasattr(file, 'seek'):
+        file.seek(0)
+    
+    # Handle sheet_name if it was passed as None (default) or distinct
+    try:
+        df = pd.read_excel(file, sheet_name=sheet_name, header=header_idx)
+    except Exception:
+        # Fallback if sheet name issue
+        if hasattr(file, 'seek'): file.seek(0)
+        df = pd.read_excel(file, header=header_idx)
+
+    df.columns = df.columns.astype(str).str.strip()
+    
+    # Check for sub-headers (e.g. Latitude/Longitude in row below header)
+    if not df.empty:
+        first_row = df.iloc[0].astype(str).str.strip().str.lower()
+        new_cols = df.columns.tolist()
+        renamed = False
+        
+        for i, val in enumerate(first_row):
+             if val in ['latitude', 'longitude', 'easting', 'northing']:
+                  new_cols[i] = val.title() # Capitalize (Latitude, Longitude)
+                  renamed = True
+        
+        if renamed:
+            print("Detected sub-headers (Latitude/Longitude). Renaming columns and dropping sub-header row.")
+            df.columns = new_cols
+            df = df.iloc[1:].reset_index(drop=True)
+            
+    # Numeric Conversion for Coordinates
+    for col in ['Latitude', 'Longitude', 'Easting', 'Northing']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            
+    return df
+
+def process_excel_data(file, interpolation_method='linear', reference_points=None, value_column='Groundwater Elevation mAHD', generate_contours=True, colormap='viridis', sheet_name=0):
     """
     Reads Excel file (or DataFrame), interpolates data, and generates a contour image.
     
@@ -22,6 +83,7 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
         reference_points: Optional list of points (e.g. from KMZ) to help with zone detection
         value_column: The specific column to map (default: 'Groundwater Elevation mAHD')
         generate_contours: If True, generates interpolation and overlay. If False, returns None for image.
+        sheet_name: Sheet to read if file is path/buffer
         
     Returns:
         - image_base64: Base64 encoded PNG image of the contour (or None).
@@ -32,7 +94,8 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     if isinstance(file, pd.DataFrame):
         df = file.copy()
     else:
-        df = pd.read_excel(file)
+        # Use robust loader
+        df = load_excel_file(file, sheet_name=sheet_name)
         
     df.columns = df.columns.str.strip()
 
@@ -48,6 +111,7 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
 
     df = df[df[target_col] != '-']
 
+    transformer = None
     # --- Coordinate Mapping for separate formats ---
     if 'Geographical Coordinates (GDA2020)' in df.columns:
         print("Detected 'Geographical Coordinates (GDA2020)' - Mapping to Lat/Lon...")
@@ -60,6 +124,29 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
             df['Longitude'] = df[lon_col]
         except Exception as e:
             print(f"Error mapping specific coordinates: {e}")
+    else:
+        # Smart MGA/UTM coordinate detection
+        mga_candidates = []
+        for col in df.columns:
+            col_lower = col.lower()
+            if any(keyword in col_lower for keyword in ['mga', 'zone', 'coordinate system', 'utm']):
+                mga_candidates.append(col)
+        
+        if mga_candidates:
+            coord_col = mga_candidates[0]
+            print(f"Detected MGA coordinate column: '{coord_col}' - Mapping to Easting/Northing...")
+            try:
+                col_idx = df.columns.get_loc(coord_col)
+                easting_col = df.columns[col_idx]
+                northing_col = df.columns[col_idx + 1] 
+                df['Easting'] = df[easting_col]
+                df['Northing'] = df[northing_col]
+                print(f"  Mapped '{easting_col}' -> Easting, '{northing_col}' -> Northing")
+                # Initialize transformer for later use if needed, though _process_single_layer does it too.
+                # But we need it for consistency if we pass it down.
+                # Actually, _process_single_layer re-detects if None, so passing None is fine.
+            except Exception as e:
+                print(f"Error mapping MGA coordinates: {e}")
     # -----------------------------------------------
 
     df['Easting'] = pd.to_numeric(df.get('Easting'), errors='coerce')
@@ -86,14 +173,72 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     if len(df) < 3:
         raise ValueError(f"Insufficient data points for interpolation. Found {len(df)}, need at least 3.")
 
+    # ============================================================
+    # AQUIFER STRATIFICATION DETECTION
+    # ============================================================
+    # IMPORTANT: Must happen AFTER coordinate mapping and dropna
+    # so that Easting/Northing columns are populated
+    from src.aquifer import analyze_aquifer_layers, split_by_aquifer_layer
+    
+    print(f"DEBUG: Starting aquifer analysis with {len(df)} wells...")
+    print(f"DEBUG: Available columns: {list(df.columns)}")
+    print(f"DEBUG: Has 'Well ID' column: {'Well ID' in df.columns}")
+    
+    # Analyze for multiple aquifer layers
+    aquifer_analysis = analyze_aquifer_layers(df, target_col, well_id_column='Well ID')
+    
+    print(f"DEBUG: Aquifer analysis result: has_stratification={aquifer_analysis['has_stratification']}, layers={aquifer_analysis['layers']}")
+    
+    if aquifer_analysis['has_stratification']:
+        # Multi-layer processing
+        print(f"Processing {len(aquifer_analysis['layers'])} separate aquifer layers...")
+        layer_results = []
+        
+        for layer_name in aquifer_analysis['layers']:
+            # Split data for this layer
+            layer_df = split_by_aquifer_layer(df, layer_name, aquifer_analysis, well_id_column='Well ID')
+            
+            print(f"Processing Layer {layer_name} ({len(layer_df)} points)...")
+            
+            # Process this layer (recursive call with single layer)
+            # We need to prevent infinite recursion, so we'll process directly
+            layer_result = _process_single_layer(
+                layer_df, use_utm, transformer, target_col, 
+                interpolation_method, generate_contours, colormap,
+                reference_points=reference_points
+            )
+            
+            layer_results.append({
+                'layer_name': f'Layer {layer_name}',
+                **layer_result
+            })
+        
+        # Return list of layer results
+        return layer_results
+    
+    # Single layer processing (no stratification detected)
+    return _process_single_layer(
+        df, use_utm, transformer, target_col,
+        interpolation_method, generate_contours, colormap,
+        reference_points=reference_points
+    )
+
+def _process_single_layer(df, use_utm, transformer, target_col, 
+                          interpolation_method, generate_contours, colormap, reference_points=None):
+    """
+    Process a single layer of data (internal function).
+    
+    This function contains the actual interpolation and visualization logic.
+    """
+
     # Auto-detect UTM zone using enhanced algorithm
-    transformer = None
+    # Use transformer passed from parent or detect new one
     if use_utm:
-        selected_epsg, confidence, zone_info = auto_detect_utm_zone(df, reference_points)
-        transformer = Transformer.from_crs(selected_epsg, "EPSG:4326", always_xy=True)
+        if transformer is None:
+            selected_epsg, confidence, zone_info = auto_detect_utm_zone(df, reference_points)
+            transformer = Transformer.from_crs(selected_epsg, "EPSG:4326", always_xy=True)
     else:
-        print("Using existing Latitude/Longitude coordinates.")
-        # Create a dummy transformer that just passes through? No, handle logic below.
+        # Using Lat/Lon, no transformer needed
         pass
 
     # -------------------------------------------------------------
@@ -202,12 +347,21 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
         # angles='xy' is CRITICAL: it ensures arrows point effectively from (x,y) to (x+u, y+v) in DATA coordinates.
         # Combined with set_aspect('equal'), this guarantees correct direction.
         
-        # Reduced density: step=15 (was 19) to increase count further
-        step = 15
+        # DYNAMIC arrow density based on number of wells
+        # More wells = more arrows for better coverage
+        num_wells = len(df)
+        if num_wells >= 20:
+            step = 10  # Dense arrows for many wells
+        elif num_wells >= 10:
+            step = 15  # Medium density
+        else:
+            step = 20  # Sparse arrows for few wells
         
-        # Shorter arrows: scale=0.12 (was 0.08). Reduce length significantly.
+        # DYNAMIC arrow scale (adjusts based on grid spacing)
+        arrow_scale = 0.12 / dx_step
+        
         ax.quiver(grid_x[::step, ::step], grid_y[::step, ::step], u[::step, ::step], v[::step, ::step], 
-                  color='red', angles='xy', scale_units='xy', scale=0.12/dx_step, width=0.003, headwidth=4, headlength=5, alpha=0.9)
+                  color='red', angles='xy', scale_units='xy', scale=arrow_scale, width=0.003, headwidth=4, headlength=5, alpha=0.9)
 
     ax.axis('off')
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
@@ -254,4 +408,9 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     }
     # print(f"DEBUG: BBox Coordinates: {bbox_geojson['geometry']['coordinates']}")
 
-    return image_base64, image_bounds, target_points, bbox_geojson
+    return {
+        'image_base64': image_base64,
+        'image_bounds': image_bounds,
+        'target_points': target_points,
+        'bbox_geojson': bbox_geojson
+    }
