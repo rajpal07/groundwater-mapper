@@ -12,3 +12,5 @@ pyproj
 scipy
 matplotlib
 numpy
+ipython
+ipywidgets
