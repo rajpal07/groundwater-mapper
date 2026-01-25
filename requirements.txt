@@ -12,3 +12,4 @@ pyproj
 scipy
 matplotlib
 numpy
+ipython

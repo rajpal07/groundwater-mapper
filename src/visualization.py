@@ -3,6 +3,20 @@ import json
 import ee
 import streamlit as st
 from google.oauth2.service_account import Credentials
+
+# --- HACK: Fix for geemap import error on newer IPython versions ---
+# geemap < 0.36 import 'display' from 'IPython.core.display' which is missing in modern IPython.
+# We manually inject it if missing.
+try:
+    import IPython.core.display
+    if not hasattr(IPython.core.display, 'display'):
+        from IPython.display import display, HTML
+        IPython.core.display.display = display
+        IPython.core.display.HTML = HTML
+except (ImportError, AttributeError):
+    pass
+# -----------------------------------------------------------------
+
 import geemap.foliumap as geemap_folium 
 import geemap.coreutils 
 import folium
