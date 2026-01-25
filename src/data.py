@@ -186,9 +186,10 @@ def process_excel_data(file, interpolation_method='linear', reference_points=Non
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
     
     buf = io.BytesIO()
-    # High DPI for HD output (prevents pixelation)
-    plt.savefig(buf, format='png', transparent=True, bbox_inches='tight', pad_inches=0, dpi=300)
-    plt.close()
+    # Optimized DPI (200) for balance between performance and quality.
+    # Removed bbox_inches='tight' as subplots_adjust already handles margins, saving processing time.
+    plt.savefig(buf, format='png', transparent=True, pad_inches=0, dpi=200)
+    plt.close(fig)
     buf.seek(0)
     image_base64 = base64.b64encode(buf.read()).decode('utf-8')
 
