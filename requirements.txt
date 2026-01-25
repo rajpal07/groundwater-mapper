@@ -6,11 +6,9 @@ llama-index
 llama-parse
 kaleido
 shapely
-geemap==0.34.0
+geemap==0.35.0
 global-land-mask
 pyproj
 scipy
 matplotlib
 numpy
-ipython
-ipywidgets
