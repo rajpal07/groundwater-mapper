@@ -36,13 +36,18 @@ st.set_page_config(layout="wide", page_title="Groundwater Mapper")
 # --- App Navigation ---
 with st.sidebar:
     st.title("Navigation")
-    app_mode = st.radio("Go to:", ["Groundwater Map", "Arrow Verification"])
+    app_mode = st.radio("Go to:", ["Groundwater Map", "Arrow Verification", "Smart Excel Export"])
     st.divider()
 
 if app_mode == "Arrow Verification":
     import src.verification_ui as verification_ui
     verification_ui.render()
     st.stop()  # Stop main script execution here
+
+if app_mode == "Smart Excel Export":
+    import src.smart_export_ui as smart_export_ui
+    smart_export_ui.render()
+    st.stop()
 
 # --- Main Map Application Starts Here ---
 st.title("Groundwater Elevation Mapper")
