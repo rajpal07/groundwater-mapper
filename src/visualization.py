@@ -22,7 +22,7 @@ except (ImportError, AttributeError):
 # -----------------------------------------------------------------
 
 import geemap.foliumap as geemap_folium 
-import geemap.coreutils 
+
 import folium
 from folium.raster_layers import ImageOverlay
 
@@ -102,8 +102,7 @@ def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_
         # If alive, configure geemap to use existing session
         print("Earth Engine active. Configuring geemap to use existing session.")
         
-        # Patch coreutils (imported at top level now)
-        geemap.coreutils.ee_initialize = lambda *args, **kwargs: None
+
         
         # Patch the module we interact with directly
         geemap_folium.ee_initialize = lambda *args, **kwargs: None
