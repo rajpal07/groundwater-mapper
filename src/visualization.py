@@ -2,7 +2,6 @@ import os
 import json
 import ee
 import streamlit as st
-from google.oauth2.service_account import Credentials
 
 # --- HACK: Fix for geemap import error on newer IPython versions ---
 # geemap < 0.36 import 'display' from 'IPython.core.display' which is missing in modern IPython.
@@ -43,9 +42,15 @@ def init_earth_engine():
             if "EARTHENGINE_TOKEN" in os.environ:
                 os.environ.pop("EARTHENGINE_TOKEN")
             
-            # Create credentials with correct EE Scope
-            scopes = ['https://www.googleapis.com/auth/earthengine']
-            credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
+            # Get service account email
+            service_account_email = service_account_info.get('client_email')
+            
+            # Use EE's native ServiceAccountCredentials instead of google.oauth2
+            # This avoids the '_credentials' attribute error
+            credentials = ee.ServiceAccountCredentials(
+                service_account_email, 
+                key_data=json.dumps(service_account_info)
+            )
             
             # Initialize with credentials
             ee.Initialize(credentials=credentials, project=GEE_PROJECT_ID)

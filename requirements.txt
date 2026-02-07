@@ -6,7 +6,8 @@ llama-index
 llama-parse
 kaleido
 shapely
-geemap==0.35.0
+earthengine-api>=0.1.384
+geemap>=0.32.0
 global-land-mask
 pyproj
 scipy
