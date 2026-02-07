@@ -4,26 +4,44 @@ import ee
 import streamlit as st
 
 # --- CRITICAL FIX: Patch geemap basemaps before import ---
-# geemap tries to call basemaps.xyz_to_folium() which doesn't exist in newer versions
-# We need to patch this before geemap.foliumap is imported
+# geemap tries to import get_xyz_dict, xyz_to_leaflet, xyz_to_folium from basemaps
+# We need to provide a complete mock module before geemap.foliumap is imported
 import sys
 import types
 
 # Create a mock basemaps module
 mock_basemaps = types.ModuleType('geemap.basemaps')
 
-def xyz_to_folium():
-    """Return minimal basemap dict for geemap compatibility"""
-    return {
-        'OpenStreetMap': {
-            'url': 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-            'attribution': 'OpenStreetMap',
-            'name': 'OpenStreetMap'
-        }
+# Define the basemap dictionary
+BASEMAPS_DICT = {
+    'OpenStreetMap': {
+        'url': 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        'attribution': 'OpenStreetMap',
+        'name': 'OpenStreetMap'
+    },
+    'SATELLITE': {
+        'url': 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+        'attribution': 'Google',
+        'name': 'Google Satellite'
     }
+}
 
-# Add the function to the mock module
+def get_xyz_dict():
+    """Return basemap dictionary"""
+    return BASEMAPS_DICT
+
+def xyz_to_folium():
+    """Return basemap dict for folium compatibility"""
+    return BASEMAPS_DICT
+
+def xyz_to_leaflet():
+    """Return basemap dict for leaflet compatibility"""
+    return BASEMAPS_DICT
+
+# Add all functions to the mock module
+mock_basemaps.get_xyz_dict = get_xyz_dict
 mock_basemaps.xyz_to_folium = xyz_to_folium
+mock_basemaps.xyz_to_leaflet = xyz_to_leaflet
 
 # Inject the mock into sys.modules before geemap imports
 sys.modules['geemap.basemaps'] = mock_basemaps
