@@ -3,6 +3,31 @@ import json
 import ee
 import streamlit as st
 
+# --- CRITICAL FIX: Patch geemap basemaps before import ---
+# geemap tries to call basemaps.xyz_to_folium() which doesn't exist in newer versions
+# We need to patch this before geemap.foliumap is imported
+import sys
+import types
+
+# Create a mock basemaps module
+mock_basemaps = types.ModuleType('geemap.basemaps')
+
+def xyz_to_folium():
+    """Return minimal basemap dict for geemap compatibility"""
+    return {
+        'OpenStreetMap': {
+            'url': 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            'attribution': 'OpenStreetMap',
+            'name': 'OpenStreetMap'
+        }
+    }
+
+# Add the function to the mock module
+mock_basemaps.xyz_to_folium = xyz_to_folium
+
+# Inject the mock into sys.modules before geemap imports
+sys.modules['geemap.basemaps'] = mock_basemaps
+
 # --- HACK: Fix for geemap import error on newer IPython versions ---
 # geemap < 0.36 import 'display' from 'IPython.core.display' which is missing in modern IPython.
 # We manually inject it if missing.
