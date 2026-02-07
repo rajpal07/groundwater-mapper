@@ -106,7 +106,17 @@ def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_
     except Exception as e:
         print(f"Earth Engine not active, attempting default initialization: {e}")
 
-    m = geemap_folium.Map(center=[center_lat, center_lon], zoom=16, basemap='SATELLITE', max_zoom=19, zoom_control=False, attributionControl=False)
+    # Use direct Folium map instead of geemap to avoid BoxKeyError with basemaps
+    # This provides better compatibility across different library versions
+    m = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=16,
+        max_zoom=19,
+        zoom_control=False,
+        attribution_control=False,
+        tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+        attr='Google Satellite'
+    )
     print(f"DEBUG: Map Type: {type(m)}")
     # print(f"DEBUG: Map Attributes: {dir(m)[:10]}...") # Inspect first few attributes
 
