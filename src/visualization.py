@@ -3,49 +3,10 @@ import json
 import ee
 import streamlit as st
 
-# --- CRITICAL FIX: Replace geemap basemaps before foliumap import ---
-# geemap.foliumap tries to call basemaps.xyz_to_folium() at line 46
-# The basemaps module is a frozen Box object, so we need to completely replace it
-import sys
-import types
-
-# Define the basemap dictionary
-BASEMAPS_DICT = {
-    'OpenStreetMap': {
-        'url': 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        'attribution': 'OpenStreetMap',
-        'name': 'OpenStreetMap'
-    },
-    'SATELLITE': {
-        'url': 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-        'attribution': 'Google',
-        'name': 'Google Satellite'
-    }
-}
-
-# Create a complete replacement module for geemap.basemaps
-mock_basemaps = types.ModuleType('geemap.basemaps')
-
-# Add the required functions
-def get_xyz_dict():
-    return BASEMAPS_DICT
-
-def xyz_to_folium():
-    return BASEMAPS_DICT
-
-def xyz_to_leaflet():
-    return BASEMAPS_DICT
-
-# Attach functions to the module
-mock_basemaps.get_xyz_dict = get_xyz_dict
-mock_basemaps.xyz_to_folium = xyz_to_folium
-mock_basemaps.xyz_to_leaflet = xyz_to_leaflet
-
-# CRITICAL: Inject the mock module into sys.modules BEFORE geemap.foliumap imports it
-sys.modules['geemap.basemaps'] = mock_basemaps
-
-print("Successfully replaced geemap.basemaps with custom implementation")
-# -----------------------------------------------------------------
+import os
+import json
+import ee
+import streamlit as st
 
 # --- HACK: Fix for geemap import error on newer IPython versions ---
 # geemap < 0.36 import 'display' from 'IPython.core.display' which is missing in modern IPython.
