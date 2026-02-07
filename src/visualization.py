@@ -3,42 +3,48 @@ import json
 import ee
 import streamlit as st
 
-# --- CRITICAL FIX: Patch geemap basemaps before foliumap import ---
+# --- CRITICAL FIX: Replace geemap basemaps before foliumap import ---
 # geemap.foliumap tries to call basemaps.xyz_to_folium() at line 46
-# We need to patch the real basemaps module with the missing methods
+# The basemaps module is a frozen Box object, so we need to completely replace it
 import sys
+import types
 
-# First, import the actual basemaps module from geemap
-try:
-    from geemap import basemaps as geemap_basemaps
-    
-    # Define the basemap dictionary
-    BASEMAPS_DICT = {
-        'OpenStreetMap': {
-            'url': 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-            'attribution': 'OpenStreetMap',
-            'name': 'OpenStreetMap'
-        },
-        'SATELLITE': {
-            'url': 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-            'attribution': 'Google',
-            'name': 'Google Satellite'
-        }
+# Define the basemap dictionary
+BASEMAPS_DICT = {
+    'OpenStreetMap': {
+        'url': 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        'attribution': 'OpenStreetMap',
+        'name': 'OpenStreetMap'
+    },
+    'SATELLITE': {
+        'url': 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+        'attribution': 'Google',
+        'name': 'Google Satellite'
     }
-    
-    # Monkey-patch the missing methods onto the real basemaps module
-    if not hasattr(geemap_basemaps, 'xyz_to_folium'):
-        geemap_basemaps.xyz_to_folium = lambda: BASEMAPS_DICT
-    
-    if not hasattr(geemap_basemaps, 'get_xyz_dict'):
-        geemap_basemaps.get_xyz_dict = lambda: BASEMAPS_DICT
-    
-    if not hasattr(geemap_basemaps, 'xyz_to_leaflet'):
-        geemap_basemaps.xyz_to_leaflet = lambda: BASEMAPS_DICT
-    
-    print("Successfully patched geemap.basemaps with missing methods")
-except Exception as e:
-    print(f"Warning: Could not patch geemap.basemaps: {e}")
+}
+
+# Create a complete replacement module for geemap.basemaps
+mock_basemaps = types.ModuleType('geemap.basemaps')
+
+# Add the required functions
+def get_xyz_dict():
+    return BASEMAPS_DICT
+
+def xyz_to_folium():
+    return BASEMAPS_DICT
+
+def xyz_to_leaflet():
+    return BASEMAPS_DICT
+
+# Attach functions to the module
+mock_basemaps.get_xyz_dict = get_xyz_dict
+mock_basemaps.xyz_to_folium = xyz_to_folium
+mock_basemaps.xyz_to_leaflet = xyz_to_leaflet
+
+# CRITICAL: Inject the mock module into sys.modules BEFORE geemap.foliumap imports it
+sys.modules['geemap.basemaps'] = mock_basemaps
+
+print("Successfully replaced geemap.basemaps with custom implementation")
 # -----------------------------------------------------------------
 
 # --- HACK: Fix for geemap import error on newer IPython versions ---
