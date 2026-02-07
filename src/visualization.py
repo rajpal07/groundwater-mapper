@@ -118,8 +118,8 @@ def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_
         max_zoom=19,
         zoom_control=False,
         attribution_control=False,
-        tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-        attr='Google Satellite'
+        tiles='https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+        attr='Google Hybrid'
     )
     print(f"DEBUG: Map Type: {type(m)}")
     # print(f"DEBUG: Map Attributes: {dir(m)[:10]}...") # Inspect first few attributes
