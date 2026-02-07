@@ -3,48 +3,43 @@ import json
 import ee
 import streamlit as st
 
-# --- CRITICAL FIX: Patch geemap basemaps before import ---
-# geemap tries to import get_xyz_dict, xyz_to_leaflet, xyz_to_folium from basemaps
-# We need to provide a complete mock module before geemap.foliumap is imported
+# --- CRITICAL FIX: Patch geemap basemaps before foliumap import ---
+# geemap.foliumap tries to call basemaps.xyz_to_folium() at line 46
+# We need to patch the real basemaps module with the missing methods
 import sys
-import types
 
-# Create a mock basemaps module
-mock_basemaps = types.ModuleType('geemap.basemaps')
-
-# Define the basemap dictionary
-BASEMAPS_DICT = {
-    'OpenStreetMap': {
-        'url': 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        'attribution': 'OpenStreetMap',
-        'name': 'OpenStreetMap'
-    },
-    'SATELLITE': {
-        'url': 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-        'attribution': 'Google',
-        'name': 'Google Satellite'
+# First, import the actual basemaps module from geemap
+try:
+    from geemap import basemaps as geemap_basemaps
+    
+    # Define the basemap dictionary
+    BASEMAPS_DICT = {
+        'OpenStreetMap': {
+            'url': 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            'attribution': 'OpenStreetMap',
+            'name': 'OpenStreetMap'
+        },
+        'SATELLITE': {
+            'url': 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+            'attribution': 'Google',
+            'name': 'Google Satellite'
+        }
     }
-}
-
-def get_xyz_dict():
-    """Return basemap dictionary"""
-    return BASEMAPS_DICT
-
-def xyz_to_folium():
-    """Return basemap dict for folium compatibility"""
-    return BASEMAPS_DICT
-
-def xyz_to_leaflet():
-    """Return basemap dict for leaflet compatibility"""
-    return BASEMAPS_DICT
-
-# Add all functions to the mock module
-mock_basemaps.get_xyz_dict = get_xyz_dict
-mock_basemaps.xyz_to_folium = xyz_to_folium
-mock_basemaps.xyz_to_leaflet = xyz_to_leaflet
-
-# Inject the mock into sys.modules before geemap imports
-sys.modules['geemap.basemaps'] = mock_basemaps
+    
+    # Monkey-patch the missing methods onto the real basemaps module
+    if not hasattr(geemap_basemaps, 'xyz_to_folium'):
+        geemap_basemaps.xyz_to_folium = lambda: BASEMAPS_DICT
+    
+    if not hasattr(geemap_basemaps, 'get_xyz_dict'):
+        geemap_basemaps.get_xyz_dict = lambda: BASEMAPS_DICT
+    
+    if not hasattr(geemap_basemaps, 'xyz_to_leaflet'):
+        geemap_basemaps.xyz_to_leaflet = lambda: BASEMAPS_DICT
+    
+    print("Successfully patched geemap.basemaps with missing methods")
+except Exception as e:
+    print(f"Warning: Could not patch geemap.basemaps: {e}")
+# -----------------------------------------------------------------
 
 # --- HACK: Fix for geemap import error on newer IPython versions ---
 # geemap < 0.36 import 'display' from 'IPython.core.display' which is missing in modern IPython.
