@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { User, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, getAuth } from 'firebase/auth'
+import { initializeApp, getApps } from 'firebase/app'
+import { firebaseConfig } from './firebase'
 
 interface AuthContextType {
     user: User | null
@@ -20,15 +22,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         const initAuth = async () => {
             try {
-                const firebaseAuth = getAuth()
-                setAuth(firebaseAuth)
+                // Initialize Firebase app first if not already initialized
+                if (typeof window !== 'undefined') {
+                    if (!getApps().length) {
+                        initializeApp(firebaseConfig)
+                    }
+                    const firebaseAuth = getAuth()
+                    setAuth(firebaseAuth)
 
-                const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
-                    setUser(user)
-                    setLoading(false)
-                })
+                    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+                        setUser(user)
+                        setLoading(false)
+                    })
 
-                return () => unsubscribe()
+                    return () => unsubscribe()
+                }
             } catch (error) {
                 console.error('Auth init error:', error)
                 setLoading(false)
@@ -39,9 +47,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [])
 
     const signInWithGoogle = async () => {
-        if (!auth) throw new Error('Auth not initialized')
+        if (!auth) {
+            console.error('Auth not initialized, initializing now...')
+            // Try to initialize
+            if (typeof window !== 'undefined' && !getApps().length) {
+                initializeApp(firebaseConfig)
+                setAuth(getAuth())
+            }
+            if (!auth) throw new Error('Auth not initialized')
+        }
         const provider = new GoogleAuthProvider()
-        await signInWithPopup(auth, provider)
+        try {
+            await signInWithPopup(auth, provider)
+        } catch (error: any) {
+            console.error('Google sign-in error:', error)
+            throw error
+        }
     }
 
     const logout = async () => {
