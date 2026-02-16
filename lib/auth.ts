@@ -1,20 +1,25 @@
 import { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
-import { PrismaAdapter } from '@auth/prisma-adapter'
-import { prisma } from './db'
-import { DefaultSession } from 'next-auth'
+import { FirestoreAdapter } from '@auth/firebase-adapter'
+import { firestore } from 'firebase-admin'
+import { initializeApp, getApps, cert } from 'firebase-admin/app'
 
-// Extend the built-in session types
-declare module 'next-auth' {
-    interface Session {
-        user: {
-            id: string
-        } & DefaultSession['user']
-    }
+// Initialize Firebase Admin for adapter
+if (getApps().length === 0) {
+    initializeApp({
+        credential: cert({
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            // For Vercel, use private key from env (replace newlines)
+            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        }),
+    })
 }
 
+const db = firestore()
+
 export const authOptions: NextAuthOptions = {
-    adapter: PrismaAdapter(prisma) as any,
+    adapter: FirestoreAdapter(db) as any,
     providers: [
         GoogleProvider({
             clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -22,9 +27,9 @@ export const authOptions: NextAuthOptions = {
         }),
     ],
     callbacks: {
-        async session({ session, user }) {
-            if (session.user) {
-                session.user.id = user.id as string
+        async session({ session, token }) {
+            if (session.user && token.sub) {
+                session.user.id = token.sub
             }
             return session
         },
