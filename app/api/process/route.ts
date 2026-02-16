@@ -9,12 +9,11 @@ export const dynamic = 'force-dynamic'
 export async function POST(request: Request): Promise<NextResponse> {
     try {
         const session = await getServerSession(authOptions)
+        const userId = session?.user?.email
 
-        if (!session?.user || !session.user.id) {
+        if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
-
-        const userId = (session.user as any).id
 
         const formData = await request.formData()
         const file = formData.get('file') as File
