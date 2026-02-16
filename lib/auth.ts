@@ -1,25 +1,47 @@
 import { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
-import { FirestoreAdapter } from '@auth/firebase-adapter'
-import { firestore } from 'firebase-admin'
 import { initializeApp, getApps, cert } from 'firebase-admin/app'
+import { getFirestore } from 'firebase-admin/firestore'
+import { DefaultSession } from 'next-auth'
 
-// Initialize Firebase Admin for adapter
-if (getApps().length === 0) {
-    initializeApp({
-        credential: cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            // For Vercel, use private key from env (replace newlines)
-            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        }),
-    })
+// Extend the built-in session types
+declare module 'next-auth' {
+    interface Session {
+        user: {
+            id: string
+        } & DefaultSession['user']
+    }
 }
 
-const db = firestore()
+// Initialize Firebase Admin (only once)
+function getFirebaseApp() {
+    if (getApps().length === 0) {
+        return initializeApp({
+            credential: cert({
+                projectId: process.env.FIREBASE_PROJECT_ID,
+                clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+                privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+            }),
+        })
+    }
+    return getApps()[0]
+}
+
+export function getFirebaseFirestore() {
+    getFirebaseApp()
+    return getFirestore()
+}
+
+// Extend the built-in session types
+declare module 'next-auth' {
+    interface Session {
+        user: {
+            id: string
+        } & DefaultSession['user']
+    }
+}
 
 export const authOptions: NextAuthOptions = {
-    adapter: FirestoreAdapter(db) as any,
     providers: [
         GoogleProvider({
             clientId: process.env.GOOGLE_CLIENT_ID!,
