@@ -1,55 +1,57 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
-
-interface Map {
-  id: string
-  name: string
-  type: string
-  status: 'pending' | 'processing' | 'completed' | 'failed'
-  createdAt: string
-  outputUrl?: string
-}
 
 interface Project {
   id: string
   name: string
   description: string
   createdAt: string
-  maps: Map[]
 }
 
-export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { user } = useAuth()
+interface Map {
+  id: string
+  name: string
+  status: 'pending' | 'processing' | 'complete' | 'failed'
+  createdAt: string
+  processedAt: string
+}
+
+export default function ProjectDetailPage() {
+  const { id } = useParams()
   const router = useRouter()
+  const { user } = useAuth()
   const [project, setProject] = useState<Project | null>(null)
+  const [maps, setMaps] = useState<Map[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const resolvedParams = use(params)
 
   useEffect(() => {
     const fetchProject = async () => {
-      if (!user) return
-
       try {
-        const token = await user.getIdToken()
-        const response = await fetch(`/api/projects/${resolvedParams.id}`, {
+        const token = await user!.getIdToken()
+        const response = await fetch(`/api/projects/${id}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         })
 
         if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error('Project not found')
+          }
           throw new Error('Failed to fetch project')
         }
 
         const data = await response.json()
         setProject(data.project)
+        setMaps(data.maps || [])
       } catch (err) {
         console.error('Error fetching project:', err)
-        setError('Failed to load project')
+        setError(err instanceof Error ? err.message : 'Failed to fetch project')
       } finally {
         setLoading(false)
       }
@@ -58,16 +60,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     if (user) {
       fetchProject()
     }
-  }, [user, resolvedParams.id])
+  }, [user, id])
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
+    if (!confirm('Are you sure you want to delete this project?')) {
       return
     }
 
     try {
       const token = await user!.getIdToken()
-      const response = await fetch(`/api/projects/${resolvedParams.id}`, {
+      const response = await fetch(`/api/projects/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -75,240 +77,130 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       })
 
       if (!response.ok) {
-        throw new Error('Failed to delete project')
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to delete project')
       }
 
       router.push('/dashboard')
     } catch (err) {
       console.error('Error deleting project:', err)
-      setError('Failed to delete project')
+      setError(err instanceof Error ? err.message : 'Failed to delete project')
     }
   }
 
   if (loading) {
     return (
-      <div className="loading-container">
-        <div className="spinner"></div>
-        <p>Loading project...</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <div className="w-10 h-10 border-4 border-gray-200 border-t-primary rounded-full animate-spin"></div>
+        <p className="text-gray-600">Loading project...</p>
       </div>
     )
   }
 
-  if (error && !project) {
+  if (error) {
     return (
-      <div className="error-container">
-        <p>{error}</p>
-        <button onClick={() => router.push('/dashboard')}>Go Back</button>
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg mb-8">
+          {error}
+        </div>
+        <Link href="/dashboard" className="text-primary hover:text-primary-dark font-medium">
+          ← Back to Dashboard
+        </Link>
       </div>
     )
   }
 
   return (
-    <div className="project-detail-page">
-      <div className="page-header">
-        <div className="header-info">
-          <h1>{project?.name}</h1>
-          <p>{project?.description || 'No description'}</p>
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="flex justify-between items-start mb-8">
+        <div>
+          <Link href="/dashboard" className="text-primary hover:text-primary-dark font-medium mb-4 inline-block">
+            ← Back to Dashboard
+          </Link>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">{project?.name}</h1>
+          {project?.description && (
+            <p className="text-gray-600 mb-4">{project.description}</p>
+          )}
+          <p className="text-sm text-gray-500">
+            Created on {new Date(project?.createdAt || '').toLocaleDateString()}
+          </p>
         </div>
-        <div className="header-actions">
-          <button onClick={handleDelete} className="btn-danger">
-            Delete Project
-          </button>
-        </div>
+        <button
+          onClick={handleDelete}
+          className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm"
+        >
+          Delete Project
+        </button>
       </div>
 
-      {error && <div className="error-message">{error}</div>}
-
-      <div className="maps-section">
-        <h2>Maps</h2>
-
-        {(project?.maps?.length ?? 0) === 0 ? (
-          <div className="empty-state">
-            <p>No maps yet. Upload data to create your first map.</p>
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-8">
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-800">Maps</h2>
+            <Link href={`/dashboard/projects/${id}/maps/new`} className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors flex items-center gap-2">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              Create Map
+            </Link>
           </div>
-        ) : (
-          <div className="maps-grid">
-            {project?.maps.map((map) => (
-              <div key={map.id} className={`map-card status-${map.status}`}>
-                <div className="map-icon">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                    <circle cx="12" cy="10" r="3"></circle>
-                  </svg>
-                </div>
-                <div className="map-info">
-                  <h3>{map.name}</h3>
-                  <p>Type: {map.type}</p>
-                  <span className={`status-badge ${map.status}`}>{map.status}</span>
-                </div>
-                {map.outputUrl && (
-                  <a href={map.outputUrl} target="_blank" rel="noopener noreferrer" className="view-btn">
-                    View Map
-                  </a>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+
+          {maps.length === 0 ? (
+            <div className="text-center py-12 px-4">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1" className="mx-auto mb-4">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">No maps yet</h3>
+              <p className="text-gray-600 mb-6">Create your first map to start visualizing groundwater data</p>
+              <Link href={`/dashboard/projects/${id}/maps/new`} className="inline-block px-6 py-2 border-2 border-primary text-primary rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">
+                Create Map
+              </Link>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-3 px-4 font-semibold text-gray-800">Map Name</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-800">Status</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-800">Created</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-800">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {maps.map((map) => (
+                    <tr key={map.id} className="border-b border-gray-100">
+                      <td className="py-4 px-4">
+                        <Link href={`/dashboard/projects/${id}/maps/${map.id}`} className="text-primary hover:text-primary-dark font-medium">
+                          {map.name}
+                        </Link>
+                      </td>
+                      <td className="py-4 px-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${map.status === 'complete' ? 'bg-green-100 text-green-800' :
+                            map.status === 'processing' ? 'bg-blue-100 text-blue-800' :
+                              map.status === 'failed' ? 'bg-red-100 text-red-800' :
+                                'bg-yellow-100 text-yellow-800'
+                          }`}>
+                          {map.status.charAt(0).toUpperCase() + map.status.slice(1)}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4 text-sm text-gray-500">
+                        {new Date(map.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="py-4 px-4">
+                        <Link href={`/dashboard/projects/${id}/maps/${map.id}`} className="px-3 py-1 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors text-sm">
+                          View
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
-
-      <style jsx>{`
-        .project-detail-page {
-          padding: 2rem;
-          max-width: 1200px;
-          margin: 0 auto;
-        }
-
-        .page-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 2rem;
-          padding-bottom: 2rem;
-          border-bottom: 1px solid #e5e7eb;
-        }
-
-        .header-info h1 {
-          font-size: 1.75rem;
-          color: #1f2937;
-          margin: 0 0 0.5rem;
-        }
-
-        .header-info p {
-          color: #6b7280;
-          margin: 0;
-        }
-
-        .btn-danger {
-          padding: 0.5rem 1rem;
-          background: #fee2e2;
-          border: none;
-          border-radius: 6px;
-          color: #dc2626;
-          cursor: pointer;
-          transition: background 0.2s;
-        }
-
-        .btn-danger:hover {
-          background: #fecaca;
-        }
-
-        .error-message {
-          background: #fee2e2;
-          color: #dc2626;
-          padding: 1rem;
-          border-radius: 8px;
-          margin-bottom: 2rem;
-        }
-
-        .maps-section h2 {
-          font-size: 1.25rem;
-          color: #1f2937;
-          margin-bottom: 1rem;
-        }
-
-        .empty-state {
-          padding: 2rem;
-          background: #f9fafb;
-          border-radius: 8px;
-          text-align: center;
-        }
-
-        .empty-state p {
-          color: #6b7280;
-          margin: 0;
-        }
-
-        .maps-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-          gap: 1rem;
-        }
-
-        .map-card {
-          display: flex;
-          gap: 1rem;
-          padding: 1.25rem;
-          background: white;
-          border: 1px solid #e5e7eb;
-          border-radius: 10px;
-        }
-
-        .map-icon {
-          width: 40px;
-          height: 40px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: #E3F3F1;
-          border-radius: 8px;
-          color: #006645;
-        }
-
-        .map-info h3 {
-          margin: 0 0 0.25rem;
-          font-size: 1rem;
-          color: #1f2937;
-        }
-
-        .map-info p {
-          margin: 0 0 0.5rem;
-          font-size: 0.875rem;
-          color: #6b7280;
-        }
-
-        .status-badge {
-          display: inline-block;
-          padding: 0.25rem 0.5rem;
-          border-radius: 4px;
-          font-size: 0.75rem;
-          font-weight: 500;
-        }
-
-        .status-badge.pending { background: #fef3c7; color: #d97706; }
-        .status-badge.processing { background: #dbeafe; color: #2563eb; }
-        .status-badge.completed { background: #d1fae5; color: #059669; }
-        .status-badge.failed { background: #fee2e2; color: #dc2626; }
-
-        .view-btn {
-          display: block;
-          margin-top: 0.75rem;
-          padding: 0.5rem 1rem;
-          background: #006645;
-          color: white;
-          text-align: center;
-          border-radius: 6px;
-          text-decoration: none;
-          font-size: 0.875rem;
-        }
-
-        .view-btn:hover {
-          background: #00493D;
-        }
-
-        .loading-container,
-        .error-container {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          min-height: 60vh;
-          gap: 1rem;
-        }
-
-        .spinner {
-          width: 40px;
-          height: 40px;
-          border: 3px solid #e5e7eb;
-          border-top-color: #006645;
-          border-radius: 50%;
-          animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   )
 }
