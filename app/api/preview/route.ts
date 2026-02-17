@@ -3,6 +3,11 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import * as XLSX from 'xlsx'
 
+// Python microservice URL - set in environment variables
+// For local development: NEXT_PUBLIC_PYTHON_SERVICE_URL=http://localhost:5000
+// For production: NEXT_PUBLIC_PYTHON_SERVICE_URL=https://groundwater-mapper.onrender.com
+const PYTHON_SERVICE_URL = process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL
+
 export const dynamic = 'force-dynamic'
 
 // Keywords to exclude from parameter selection (matching Streamlit app)
@@ -45,6 +50,44 @@ export async function POST(request: Request): Promise<NextResponse> {
             return NextResponse.json({ error: 'No file provided' }, { status: 400 })
         }
 
+        // If Python service URL is configured, use it
+        if (PYTHON_SERVICE_URL) {
+            try {
+                // Convert file to base64 for Python service
+                const buffer = Buffer.from(await file.arrayBuffer())
+                const base64Content = buffer.toString('base64')
+
+                // Forward to Python service
+                const pythonFormData = new FormData()
+                pythonFormData.append('file', new Blob([buffer]), file.name)
+                pythonFormData.append('use_llamaparse', 'true')
+
+                const pythonResponse = await fetch(`${PYTHON_SERVICE_URL}/preview`, {
+                    method: 'POST',
+                    body: pythonFormData,
+                })
+
+                if (pythonResponse.ok) {
+                    const pythonData = await pythonResponse.json()
+                    return NextResponse.json({
+                        success: true,
+                        columns: pythonData.columns,
+                        availableParameters: pythonData.numeric_columns,
+                        rowCount: pythonData.row_count,
+                        sampleData: pythonData.preview,
+                        source: 'python',
+                        parse_method: pythonData.parse_method
+                    })
+                } else {
+                    console.error('Python service error:', await pythonResponse.text())
+                }
+            } catch (pythonError) {
+                console.error('Error calling Python service:', pythonError)
+                // Fall through to Node.js implementation
+            }
+        }
+
+        // Node.js implementation (fallback)
         // Read Excel file
         const buffer = Buffer.from(await file.arrayBuffer())
         const workbook = XLSX.read(buffer, { type: 'buffer' })
