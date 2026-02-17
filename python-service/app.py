@@ -15,8 +15,42 @@ from pyproj import Transformer
 import json
 import os
 import warnings
+from datetime import datetime, date, time
 
 warnings.filterwarnings("ignore")
+
+
+def make_json_serializable(obj):
+    """Convert non-JSON-serializable objects to serializable types."""
+    if obj is None or pd.isna(obj):
+        return None
+    elif isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    elif isinstance(obj, time):
+        return obj.strftime('%H:%M:%S')
+    elif isinstance(obj, (np.integer, np.int64, np.int32)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64, np.float32)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, pd.Timestamp):
+        return obj.isoformat()
+    elif isinstance(obj, bytes):
+        return obj.decode('utf-8', errors='replace')
+    else:
+        return obj
+
+
+def convert_df_for_json(df):
+    """Convert a DataFrame to a JSON-serializable format."""
+    result = []
+    for record in df.to_dict(orient='records'):
+        converted_record = {}
+        for key, value in record.items():
+            converted_record[key] = make_json_serializable(value)
+        result.append(converted_record)
+    return result
 
 app = Flask(__name__)
 CORS(app)
@@ -423,8 +457,8 @@ def preview():
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         all_cols = df.columns.tolist()
         
-        # Get first few rows
-        preview_data = df.head(10).to_dict(orient='records')
+        # Get first few rows - convert to JSON-serializable format
+        preview_data = convert_df_for_json(df.head(10))
         
         # Sample stats for numeric columns
         stats = {}
