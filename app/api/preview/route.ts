@@ -71,6 +71,7 @@ export async function POST(request: Request): Promise<NextResponse> {
                     const pythonData = await pythonResponse.json()
                     return NextResponse.json({
                         success: true,
+                        sheets: pythonData.sheets || [],
                         columns: pythonData.columns,
                         availableParameters: pythonData.numeric_columns,
                         rowCount: pythonData.row_count,
@@ -79,7 +80,13 @@ export async function POST(request: Request): Promise<NextResponse> {
                         parse_method: pythonData.parse_method
                     })
                 } else {
-                    console.error('Python service error:', await pythonResponse.text())
+                    // Handle Python service error - try to get error message
+                    const errorText = await pythonResponse.text()
+                    console.error('Python service error:', errorText)
+                    // Return error as JSON so frontend can handle it
+                    return NextResponse.json({
+                        error: 'Python service error: ' + errorText.substring(0, 100)
+                    }, { status: 502 })
                 }
             } catch (pythonError) {
                 console.error('Error calling Python service:', pythonError)

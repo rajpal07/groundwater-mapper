@@ -5,6 +5,15 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 
+interface PreviewData {
+    sheets?: string[]
+    sheetNames?: string[]
+    columns: string[]
+    availableParameters: string[]
+    rowCount: number
+    sampleData: any[]
+}
+
 export default function NewMapPage() {
     const { id: projectId } = useParams()
     const router = useRouter()
@@ -13,21 +22,81 @@ export default function NewMapPage() {
 
     const [name, setName] = useState('')
     const [file, setFile] = useState<File | null>(null)
-    const [parameter, setParameter] = useState('Value')
+    const [selectedSheet, setSelectedSheet] = useState('')
+    const [parameter, setParameter] = useState('')
     const [colormap, setColormap] = useState('viridis')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [uploading, setUploading] = useState(false)
+    const [previewData, setPreviewData] = useState<PreviewData | null>(null)
+    const [loadingPreview, setLoadingPreview] = useState(false)
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            setFile(e.target.files[0])
+            const selectedFile = e.target.files[0]
+            setFile(selectedFile)
+            setError('')
+
             if (!name) {
                 // Auto-fill name from filename
-                const fileName = e.target.files[0].name.replace(/\.[^/.]+$/, '')
+                const fileName = selectedFile.name.replace(/\.[^/.]+$/, '')
                 setName(fileName)
             }
+
+            // Fetch preview data (columns, sheets) from the file
+            await fetchPreviewData(selectedFile)
         }
+    }
+
+    const fetchPreviewData = async (fileToUpload: File) => {
+        setLoadingPreview(true)
+        setPreviewData(null)
+
+        try {
+            const token = await user!.getIdToken()
+
+            const formData = new FormData()
+            formData.append('file', fileToUpload)
+
+            const response = await fetch('/api/preview', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
+                body: formData
+            })
+
+            if (!response.ok) {
+                const data = await response.json()
+                throw new Error(data.error || 'Failed to preview file')
+            }
+
+            const data = await response.json()
+            setPreviewData(data)
+
+            // Auto-select first sheet if available
+            const sheets = data.sheets || data.sheetNames || []
+            if (sheets.length > 0) {
+                setSelectedSheet(sheets[0])
+            }
+
+            // Auto-select first available parameter if any
+            if (data.availableParameters && data.availableParameters.length > 0) {
+                setParameter(data.availableParameters[0])
+            } else if (data.columns && data.columns.length > 0) {
+                setParameter(data.columns[0])
+            }
+
+        } catch (err) {
+            console.error('Error fetching preview:', err)
+            setError(err instanceof Error ? err.message : 'Failed to read file')
+        } finally {
+            setLoadingPreview(false)
+        }
+    }
+
+    const handleSheetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        setSelectedSheet(e.target.value)
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -40,6 +109,11 @@ export default function NewMapPage() {
 
         if (!file) {
             setError('Please select a data file (CSV or Excel)')
+            return
+        }
+
+        if (!parameter) {
+            setError('Please select a parameter column to map')
             return
         }
 
@@ -75,6 +149,9 @@ export default function NewMapPage() {
             formData.append('projectId', projectId as string)
             formData.append('parameter', parameter)
             formData.append('colormap', colormap)
+            if (selectedSheet) {
+                formData.append('sheet', selectedSheet)
+            }
 
             const uploadResponse = await fetch('/api/process', {
                 method: 'POST',
@@ -99,6 +176,11 @@ export default function NewMapPage() {
             setUploading(false)
         }
     }
+
+    // Get sheets from preview data
+    const sheets = previewData?.sheets || previewData?.sheetNames || []
+    const isExcelFile = file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))
+    const showSheetDropdown = isExcelFile && sheets.length > 1
 
     return (
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -167,19 +249,77 @@ export default function NewMapPage() {
                     </div>
                 </div>
 
-                <div className="mb-6">
-                    <label htmlFor="parameter" className="block font-medium text-gray-700 mb-2">Parameter *</label>
-                    <input
-                        type="text"
-                        id="parameter"
-                        value={parameter}
-                        onChange={(e) => setParameter(e.target.value)}
-                        placeholder="e.g., GWL, Depth, Level"
-                        required
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary transition-colors"
-                    />
-                    <p className="text-sm text-gray-500 mt-1">Column name in your Excel file for the values to map</p>
-                </div>
+                {loadingPreview && (
+                    <div className="mb-6 text-center py-4 bg-gray-50 rounded-lg">
+                        <svg className="animate-spin w-6 h-6 text-primary mx-auto mb-2" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p className="text-gray-600">Reading file...</p>
+                    </div>
+                )}
+
+                {showSheetDropdown && (
+                    <div className="mb-6">
+                        <label htmlFor="sheet" className="block font-medium text-gray-700 mb-2">Select Sheet *</label>
+                        <select
+                            id="sheet"
+                            value={selectedSheet}
+                            onChange={handleSheetChange}
+                            required
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary transition-colors"
+                        >
+                            {sheets.map((sheet) => (
+                                <option key={sheet} value={sheet}>
+                                    {sheet}
+                                </option>
+                            ))}
+                        </select>
+                        <p className="text-sm text-gray-500 mt-1">Select the sheet containing your data</p>
+                    </div>
+                )}
+
+                {previewData && (previewData.availableParameters?.length > 0 || previewData.columns?.length > 0) && (
+                    <div className="mb-6">
+                        <label htmlFor="parameter" className="block font-medium text-gray-700 mb-2">
+                            Parameter to Map *
+                            {previewData.availableParameters && previewData.availableParameters.length > 0 && (
+                                <span className="text-sm text-gray-500 font-normal ml-2">(Numeric columns suggested)</span>
+                            )}
+                        </label>
+                        <select
+                            id="parameter"
+                            value={parameter}
+                            onChange={(e) => setParameter(e.target.value)}
+                            required
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary transition-colors"
+                        >
+                            <option value="">-- Select Parameter --</option>
+                            {(previewData.availableParameters?.length > 0 ? previewData.availableParameters : previewData.columns || []).map((col) => (
+                                <option key={col} value={col}>
+                                    {col}
+                                </option>
+                            ))}
+                        </select>
+                        <p className="text-sm text-gray-500 mt-1">Column containing the values to visualize on the map</p>
+                    </div>
+                )}
+
+                {!previewData && file && !loadingPreview && (
+                    <div className="mb-6">
+                        <label htmlFor="parameter" className="block font-medium text-gray-700 mb-2">Parameter *</label>
+                        <input
+                            type="text"
+                            id="parameter"
+                            value={parameter}
+                            onChange={(e) => setParameter(e.target.value)}
+                            placeholder="e.g., GWL, Depth, Level"
+                            required
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary transition-colors"
+                        />
+                        <p className="text-sm text-gray-500 mt-1">Column name in your Excel file for the values to map</p>
+                    </div>
+                )}
 
                 <div className="mb-6">
                     <label htmlFor="colormap" className="block font-medium text-gray-700 mb-2">Color Scheme</label>
@@ -229,10 +369,10 @@ export default function NewMapPage() {
 
                 <button
                     type="submit"
-                    disabled={loading || uploading}
+                    disabled={loading || uploading || loadingPreview}
                     className="w-full px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                    {loading || uploading ? (
+                    {loading || uploading || loadingPreview ? (
                         <>
                             <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
