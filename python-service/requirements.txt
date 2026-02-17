@@ -8,8 +8,8 @@ pyproj==3.6.1
 openpyxl==3.1.2
 python-dotenv==1.0.0
 
-# Optional: LlamaCloud
-# llama-parse==0.1.0
+# LlamaCloud for AI-powered Excel parsing
+llama-parse==0.1.0
 
-# Optional: Google Earth Engine
-# earthengine-api==0.1.374
+# Google Earth Engine for satellite imagery
+earthengine-api==0.1.374

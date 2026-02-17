@@ -189,10 +189,29 @@ export default function NewMapPage() {
                         onChange={(e) => setColormap(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary transition-colors"
                     >
-                        <option value="viridis">Viridis (Purple to Yellow)</option>
+                        <option value="viridis">Viridis (Purple → Yellow)</option>
+                        <option value="plasma">Plasma (Purple → Orange → Yellow)</option>
+                        <option value="RdYlBu_r">Red-Yellow-Blue (Reversed)</option>
+                        <option value="RdYlBu">Red-Yellow-Blue</option>
                         <option value="blues">Blues</option>
                         <option value="greens">Greens</option>
                         <option value="reds">Reds</option>
+                        <option value="YlOrRd">Yellow-Orange-Red</option>
+                        <option value="YlGn">Yellow-Green</option>
+                        <option value="YlGnBu">Yellow-Green-Blue</option>
+                        <option value="BuPu">Blue-Purple</option>
+                        <option value="GnBu">Green-Blue</option>
+                        <option value="OrRd">Orange-Red</option>
+                        <option value="PuBu">Purple-Blue</option>
+                        <option value="PuRd">Purple-Red</option>
+                        <option value="BrBG">Brown-Blue-Green</option>
+                        <option value="PRGn">Purple-Green</option>
+                        <option value="PiYG">Pink-Yellow-Green</option>
+                        <option value="inferno">Inferno</option>
+                        <option value="magma">Magma</option>
+                        <option value="cividis">Cividis</option>
+                        <option value="Spectral_r">Spectral (Reversed)</option>
+                        <option value="coolwarm">Coolwarm</option>
                     </select>
                 </div>
 

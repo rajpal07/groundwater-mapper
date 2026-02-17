@@ -31,7 +31,20 @@ except ImportError:
 
 try:
     import ee
-    HAS_GEE = True
+    # Initialize Google Earth Engine with service account
+    service_account = os.environ.get('GOOGLE_EE_SERVICE_ACCOUNT')
+    if service_account:
+        try:
+            import json
+            credentials = json.loads(service_account)
+            ee.Initialize(credentials)
+            HAS_GEE = True
+            print("Google Earth Engine initialized successfully!")
+        except Exception as e:
+            print(f"Warning: Failed to initialize GEE: {e}")
+            HAS_GEE = False
+    else:
+        HAS_GEE = False
 except ImportError:
     HAS_GEE = False
     print("Warning: Google Earth Engine not installed.")
