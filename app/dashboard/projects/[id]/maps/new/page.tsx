@@ -13,6 +13,8 @@ export default function NewMapPage() {
 
     const [name, setName] = useState('')
     const [file, setFile] = useState<File | null>(null)
+    const [parameter, setParameter] = useState('Value')
+    const [colormap, setColormap] = useState('viridis')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [uploading, setUploading] = useState(false)
@@ -70,6 +72,9 @@ export default function NewMapPage() {
             const formData = new FormData()
             formData.append('file', file)
             formData.append('mapId', mapId)
+            formData.append('projectId', projectId as string)
+            formData.append('parameter', parameter)
+            formData.append('colormap', colormap)
 
             const uploadResponse = await fetch('/api/process', {
                 method: 'POST',
@@ -160,6 +165,35 @@ export default function NewMapPage() {
                             </div>
                         )}
                     </div>
+                </div>
+
+                <div className="mb-6">
+                    <label htmlFor="parameter" className="block font-medium text-gray-700 mb-2">Parameter *</label>
+                    <input
+                        type="text"
+                        id="parameter"
+                        value={parameter}
+                        onChange={(e) => setParameter(e.target.value)}
+                        placeholder="e.g., GWL, Depth, Level"
+                        required
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary transition-colors"
+                    />
+                    <p className="text-sm text-gray-500 mt-1">Column name in your Excel file for the values to map</p>
+                </div>
+
+                <div className="mb-6">
+                    <label htmlFor="colormap" className="block font-medium text-gray-700 mb-2">Color Scheme</label>
+                    <select
+                        id="colormap"
+                        value={colormap}
+                        onChange={(e) => setColormap(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary transition-colors"
+                    >
+                        <option value="viridis">Viridis (Purple to Yellow)</option>
+                        <option value="blues">Blues</option>
+                        <option value="greens">Greens</option>
+                        <option value="reds">Reds</option>
+                    </select>
                 </div>
 
                 <div className="bg-blue-50 rounded-lg p-4 mb-6">

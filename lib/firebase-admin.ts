@@ -181,6 +181,24 @@ export async function deleteMap(userId: string, projectId: string, mapId: string
         .delete()
 }
 
+export async function updateMap(userId: string, projectId: string, mapId: string, mapData: any) {
+    if (!adminDb) throw new Error('Firestore not initialized')
+
+    await adminDb
+        .collection('users')
+        .doc(userId)
+        .collection('projects')
+        .doc(projectId)
+        .collection('maps')
+        .doc(mapId)
+        .update({
+            ...mapData,
+            updatedAt: new Date().toISOString(),
+        })
+
+    return { id: mapId, ...mapData }
+}
+
 export async function getProject(userId: string, projectId: string) {
     if (!adminDb) return null
 
@@ -228,18 +246,3 @@ export async function getProjectWithMaps(userId: string, projectId: string) {
     }
 }
 
-export async function getMap(userId: string, projectId: string, mapId: string) {
-    if (!adminDb) return null
-
-    const doc = await adminDb
-        .collection('users')
-        .doc(userId)
-        .collection('projects')
-        .doc(projectId)
-        .collection('maps')
-        .doc(mapId)
-        .get()
-
-    if (!doc.exists) return null
-    return { id: doc.id, ...doc.data() }
-}

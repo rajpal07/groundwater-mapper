@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getUserProjects, createMap } from '@/lib/firebase-admin'
+import { getUserProjects, createMap, updateMap } from '@/lib/firebase-admin'
 import * as XLSX from 'xlsx'
 
 export const dynamic = 'force-dynamic'
@@ -20,6 +20,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         const parameter = formData.get('parameter') as string
         const colormap = formData.get('colormap') as string || 'viridis'
         const projectId = formData.get('projectId') as string
+        const mapId = formData.get('mapId') as string
 
         if (!file || !parameter || !projectId) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -72,18 +73,18 @@ export async function POST(request: Request): Promise<NextResponse> {
         const contourData = generateContourData(processedData, min, max)
 
         // Save map to Firebase
-        const mapData = await createMap(userId, projectId, {
-            name: `${parameter} Map`,
+        const mapData = await updateMap(userId, projectId, mapId, {
             parameter,
             colormap,
             dataPoints: processedData.length,
             statistics: { min, max, avg },
-            status: 'completed'
+            status: 'complete',
+            processedAt: new Date().toISOString()
         })
 
         return NextResponse.json({
             success: true,
-            mapId: mapData.id,
+            mapId: mapId,
             data: processedData,
             statistics: { min, max, avg },
             colorScale,
