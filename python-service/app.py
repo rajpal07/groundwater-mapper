@@ -35,6 +35,7 @@ try:
     HAS_GEE = False
     
     # Method 1: Try to read from secret file (recommended for Render)
+    # Also try to auto-detect any JSON file in /etc/secrets/
     secret_file = os.environ.get('GEE_SECRET_FILE', '/etc/secrets/gee-service-account.json')
     if os.path.exists(secret_file):
         try:
@@ -49,6 +50,32 @@ try:
             print("Google Earth Engine initialized from secret file!")
         except Exception as e:
             print(f"Warning: Failed to init GEE from secret file: {e}")
+    
+    # Auto-detect JSON files in /etc/secrets/
+    if not HAS_GEE:
+        try:
+            secrets_dir = '/etc/secrets'
+            if os.path.exists(secrets_dir):
+                for filename in os.listdir(secrets_dir):
+                    if filename.endswith('.json'):
+                        secret_path = os.path.join(secrets_dir, filename)
+                        print(f"Trying secret file: {secret_path}")
+                        try:
+                            with open(secret_path, 'r') as f:
+                                credentials = json.load(f)
+                            if 'private_key' in credentials and 'client_email' in credentials:
+                                credentials_obj = ee.ServiceAccountCredentials(
+                                    credentials['client_email'],
+                                    private_key=credentials['private_key']
+                                )
+                                ee.Initialize(credentials_obj)
+                                HAS_GEE = True
+                                print(f"Google Earth Engine initialized from {filename}!")
+                                break
+                        except Exception as e:
+                            print(f"Warning: Failed to init GEE from {filename}: {e}")
+        except Exception as e:
+            print(f"Warning: Error scanning secrets directory: {e}")
     
     # Method 2: Try base64 encoded env variable
     if not HAS_GEE:
@@ -429,11 +456,34 @@ def process_file():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/debug', methods=['GET'])
+def debug():
+    """Debug endpoint to check GEE initialization status"""
+    debug_info = {
+        'gee_available': 'ee' in globals(),
+        'gee_initialized': HAS_GEE,
+        'secret_file_path': '/etc/secrets/gee-service-account.json',
+        'secret_file_exists': os.path.exists('/etc/secrets/gee-service-account.json'),
+    }
+    
+    # Check all files in /etc/secrets
+    try:
+        secrets_dir = '/etc/secrets'
+        if os.path.exists(secrets_dir):
+            debug_info['secrets_files'] = os.listdir(secrets_dir)
+        else:
+            debug_info['secrets_files'] = 'Directory does not exist'
+    except Exception as e:
+        debug_info['secrets_files'] = str(e)
+    
+    return jsonify(debug_info)
+
+
 @app.route('/', methods=['GET', 'HEAD'])
 def index():
     return jsonify({
         'message': 'Groundwater Mapper API',
-        'endpoints': ['/health', '/preview', '/process']
+        'endpoints': ['/health', '/debug', '/preview', '/process']
     })
 
 
