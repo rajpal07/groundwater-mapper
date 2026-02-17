@@ -31,59 +31,74 @@ except ImportError:
 
 try:
     import ee
-    # Initialize Google Earth Engine - support both base64 encoded and regular JSON
-    service_account_b64 = os.environ.get('GOOGLE_EE_SERVICE_ACCOUNT_B64')
-    service_account = os.environ.get('GOOGLE_EE_SERVICE_ACCOUNT')
+    # Initialize Google Earth Engine - try multiple methods
+    HAS_GEE = False
     
-    if service_account_b64:
+    # Method 1: Try to read from secret file (recommended for Render)
+    secret_file = os.environ.get('GEE_SECRET_FILE', '/etc/secrets/gee-service-account.json')
+    if os.path.exists(secret_file):
         try:
-            # Decode base64 to JSON string
-            json_str = base64.b64decode(service_account_b64).decode('utf-8')
-            credentials = json.loads(json_str)
-            
+            with open(secret_file, 'r') as f:
+                credentials = json.load(f)
             credentials_obj = ee.ServiceAccountCredentials(
                 credentials['client_email'],
                 private_key=credentials['private_key']
             )
             ee.Initialize(credentials_obj)
             HAS_GEE = True
-            print("Google Earth Engine initialized successfully from base64!")
+            print("Google Earth Engine initialized from secret file!")
         except Exception as e:
-            print(f"Warning: Failed to initialize GEE from base64: {e}")
-            HAS_GEE = False
-    elif service_account:
-        try:
-            import json
-            # Clean up the service account JSON string
-            # Handle escaped newlines first
-            service_account = service_account.replace('\\n', '\n').replace('\\\\n', '\n')
-            
-            # Remove any control characters except newlines and tabs
-            cleaned = []
-            for i, char in enumerate(service_account):
-                code = ord(char)
-                if code >= 32 or code in (9, 10):
-                    cleaned.append(char)
-            service_account = ''.join(cleaned)
-            
-            credentials = json.loads(service_account)
-            
-            if 'private_key' in credentials:
-                credentials['private_key'] = credentials['private_key'].replace('\\n', '\n').replace('\\\\n', '\n')
-            
-            credentials_obj = ee.ServiceAccountCredentials(
-                credentials['client_email'],
-                private_key=credentials['private_key']
-            )
-            ee.Initialize(credentials_obj)
-            HAS_GEE = True
-            print("Google Earth Engine initialized successfully!")
-        except Exception as e:
-            print(f"Warning: Failed to initialize GEE: {e}")
-            HAS_GEE = False
-    else:
-        HAS_GEE = False
-        print("No GEE credentials provided")
+            print(f"Warning: Failed to init GEE from secret file: {e}")
+    
+    # Method 2: Try base64 encoded env variable
+    if not HAS_GEE:
+        service_account_b64 = os.environ.get('GOOGLE_EE_SERVICE_ACCOUNT_B64')
+        if service_account_b64:
+            try:
+                json_str = base64.b64decode(service_account_b64).decode('utf-8')
+                credentials = json.loads(json_str)
+                credentials_obj = ee.ServiceAccountCredentials(
+                    credentials['client_email'],
+                    private_key=credentials['private_key']
+                )
+                ee.Initialize(credentials_obj)
+                HAS_GEE = True
+                print("Google Earth Engine initialized from base64!")
+            except Exception as e:
+                print(f"Warning: Failed to init GEE from base64: {e}")
+    
+    # Method 3: Try regular env variable (not recommended)
+    if not HAS_GEE:
+        service_account = os.environ.get('GOOGLE_EE_SERVICE_ACCOUNT')
+        if service_account:
+            try:
+                # Clean up the service account JSON string
+                service_account = service_account.replace('\\n', '\n').replace('\\\\n', '\n')
+                
+                # Remove any control characters except newlines and tabs
+                cleaned = []
+                for char in service_account:
+                    code = ord(char)
+                    if code >= 32 or code in (9, 10):
+                        cleaned.append(char)
+                service_account = ''.join(cleaned)
+                
+                credentials = json.loads(service_account)
+                if 'private_key' in credentials:
+                    credentials['private_key'] = credentials['private_key'].replace('\\n', '\n').replace('\\\\n', '\n')
+                
+                credentials_obj = ee.ServiceAccountCredentials(
+                    credentials['client_email'],
+                    private_key=credentials['private_key']
+                )
+                ee.Initialize(credentials_obj)
+                HAS_GEE = True
+                print("Google Earth Engine initialized from env var!")
+            except Exception as e:
+                print(f"Warning: Failed to init GEE from env var: {e}")
+    
+    if not HAS_GEE:
+        print("GEE initialization skipped - continuing without it")
 except ImportError:
     HAS_GEE = False
     print("Warning: Google Earth Engine not installed.")
