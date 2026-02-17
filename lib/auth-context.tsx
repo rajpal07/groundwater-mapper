@@ -47,21 +47,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [])
 
     const signInWithGoogle = async () => {
-        if (!auth) {
-            console.error('Auth not initialized, initializing now...')
+        let currentAuth = auth;
+
+        if (!currentAuth) {
+            console.log('Auth not initialized, initializing now...');
             // Try to initialize
-            if (typeof window !== 'undefined' && !getApps().length) {
-                initializeApp(firebaseConfig)
-                setAuth(getAuth())
+            if (typeof window !== 'undefined') {
+                if (!getApps().length) {
+                    initializeApp(firebaseConfig);
+                }
+                currentAuth = getAuth();
+                setAuth(currentAuth);
             }
-            if (!auth) throw new Error('Auth not initialized')
+            if (!currentAuth) throw new Error('Auth not initialized');
         }
-        const provider = new GoogleAuthProvider()
+
+        const provider = new GoogleAuthProvider();
         try {
-            await signInWithPopup(auth, provider)
+            await signInWithPopup(currentAuth, provider);
         } catch (error: any) {
-            console.error('Google sign-in error:', error)
-            throw error
+            console.error('Google sign-in error:', error);
+            throw error;
         }
     }
 
