@@ -36,8 +36,16 @@ try:
     if service_account:
         try:
             import json
+            # Handle escaped newlines in the JSON string
+            service_account = service_account.replace('\\n', '\n')
             credentials = json.loads(service_account)
-            ee.Initialize(credentials=credentials)
+            
+            # Use service account credentials properly
+            credentials_obj = ee.ServiceAccountCredentials(
+                credentials['client_email'],
+                private_key=credentials['private_key']
+            )
+            ee.Initialize(credentials_obj)
             HAS_GEE = True
             print("Google Earth Engine initialized successfully!")
         except Exception as e:
