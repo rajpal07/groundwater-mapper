@@ -64,10 +64,29 @@ try:
                             with open(secret_path, 'r') as f:
                                 credentials = json.load(f)
                             if 'private_key' in credentials and 'client_email' in credentials:
-                                credentials_obj = ee.ServiceAccountCredentials(
-                                    credentials['client_email'],
-                                    private_key=credentials['private_key']
-                                )
+                                # Try different parameter names for different GEE library versions
+                                private_key = credentials['private_key']
+                                client_email = credentials['client_email']
+                                
+                                # Try the newer API first (key=), then fallback to older (private_key=)
+                                try:
+                                    credentials_obj = ee.ServiceAccountCredentials(
+                                        client_email,
+                                        key=private_key
+                                    )
+                                except TypeError:
+                                    try:
+                                        credentials_obj = ee.ServiceAccountCredentials(
+                                            client_email,
+                                            private_key=private_key
+                                        )
+                                    except TypeError:
+                                        # Try with 'key_dict' parameter
+                                        credentials_obj = ee.ServiceAccountCredentials(
+                                            client_email,
+                                            key_dict=credentials
+                                        )
+                                
                                 ee.Initialize(credentials_obj)
                                 HAS_GEE = True
                                 print(f"Google Earth Engine initialized from {filename}!")
