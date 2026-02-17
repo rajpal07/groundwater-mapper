@@ -31,21 +31,22 @@ except ImportError:
 
 try:
     import ee
-    # Initialize Google Earth Engine - try multiple methods
+    from google.oauth2 import service_account
+    # Initialize Google Earth Engine - use google-auth library
     HAS_GEE = False
     
+    # Define the required scope for Earth Engine
+    EE_SCOPE = 'https://www.googleapis.com/auth/earthengine'
+    
     # Method 1: Try to read from secret file (recommended for Render)
-    # Also try to auto-detect any JSON file in /etc/secrets/
     secret_file = os.environ.get('GEE_SECRET_FILE', '/etc/secrets/gee-service-account.json')
     if os.path.exists(secret_file):
         try:
-            with open(secret_file, 'r') as f:
-                credentials = json.load(f)
-            credentials_obj = ee.ServiceAccountCredentials(
-                credentials['client_email'],
-                private_key=credentials['private_key']
+            credentials = service_account.Credentials.from_service_account_file(
+                secret_file,
+                scopes=[EE_SCOPE]
             )
-            ee.Initialize(credentials_obj)
+            ee.Initialize(credentials=credentials)
             HAS_GEE = True
             print("Google Earth Engine initialized from secret file!")
         except Exception as e:
@@ -61,93 +62,42 @@ try:
                         secret_path = os.path.join(secrets_dir, filename)
                         print(f"Trying secret file: {secret_path}")
                         try:
-                            with open(secret_path, 'r') as f:
-                                credentials = json.load(f)
-                            if 'private_key' in credentials and 'client_email' in credentials:
-                                # Try different parameter names for different GEE library versions
-                                private_key = credentials['private_key']
-                                client_email = credentials['client_email']
-                                
-                                # Try the newer API first (key=), then fallback to older (private_key=)
-                                try:
-                                    credentials_obj = ee.ServiceAccountCredentials(
-                                        client_email,
-                                        key=private_key
-                                    )
-                                except TypeError:
-                                    try:
-                                        credentials_obj = ee.ServiceAccountCredentials(
-                                            client_email,
-                                            private_key=private_key
-                                        )
-                                    except TypeError:
-                                        # Try with 'key_dict' parameter
-                                        credentials_obj = ee.ServiceAccountCredentials(
-                                            client_email,
-                                            key_dict=credentials
-                                        )
-                                
-                                ee.Initialize(credentials_obj)
-                                HAS_GEE = True
-                                print(f"Google Earth Engine initialized from {filename}!")
-                                break
+                            credentials = service_account.Credentials.from_service_account_file(
+                                secret_path,
+                                scopes=[EE_SCOPE]
+                            )
+                            ee.Initialize(credentials=credentials)
+                            HAS_GEE = True
+                            print(f"Google Earth Engine initialized from {filename}!")
+                            break
                         except Exception as e:
                             print(f"Warning: Failed to init GEE from {filename}: {e}")
         except Exception as e:
             print(f"Warning: Error scanning secrets directory: {e}")
     
-    # Method 2: Try base64 encoded env variable
+    # Method 2: Try GOOGLE_APPLICATION_CREDENTIALS env var
     if not HAS_GEE:
-        service_account_b64 = os.environ.get('GOOGLE_EE_SERVICE_ACCOUNT_B64')
-        if service_account_b64:
+        gac = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+        if gac and os.path.exists(gac):
             try:
-                json_str = base64.b64decode(service_account_b64).decode('utf-8')
-                credentials = json.loads(json_str)
-                credentials_obj = ee.ServiceAccountCredentials(
-                    credentials['client_email'],
-                    private_key=credentials['private_key']
+                credentials = service_account.Credentials.from_service_account_file(
+                    gac,
+                    scopes=[EE_SCOPE]
                 )
-                ee.Initialize(credentials_obj)
+                ee.Initialize(credentials=credentials)
                 HAS_GEE = True
-                print("Google Earth Engine initialized from base64!")
+                print("Google Earth Engine initialized from GOOGLE_APPLICATION_CREDENTIALS!")
             except Exception as e:
-                print(f"Warning: Failed to init GEE from base64: {e}")
-    
-    # Method 3: Try regular env variable (not recommended)
-    if not HAS_GEE:
-        service_account = os.environ.get('GOOGLE_EE_SERVICE_ACCOUNT')
-        if service_account:
-            try:
-                # Clean up the service account JSON string
-                service_account = service_account.replace('\\n', '\n').replace('\\\\n', '\n')
-                
-                # Remove any control characters except newlines and tabs
-                cleaned = []
-                for char in service_account:
-                    code = ord(char)
-                    if code >= 32 or code in (9, 10):
-                        cleaned.append(char)
-                service_account = ''.join(cleaned)
-                
-                credentials = json.loads(service_account)
-                if 'private_key' in credentials:
-                    credentials['private_key'] = credentials['private_key'].replace('\\n', '\n').replace('\\\\n', '\n')
-                
-                credentials_obj = ee.ServiceAccountCredentials(
-                    credentials['client_email'],
-                    private_key=credentials['private_key']
-                )
-                ee.Initialize(credentials_obj)
-                HAS_GEE = True
-                print("Google Earth Engine initialized from env var!")
-            except Exception as e:
-                print(f"Warning: Failed to init GEE from env var: {e}")
+                print(f"Warning: Failed to init GEE from GOOGLE_APPLICATION_CREDENTIALS: {e}")
     
     if not HAS_GEE:
         print("GEE initialization skipped - continuing without it")
-except ImportError:
+except ImportError as e:
     HAS_GEE = False
-    print("Warning: Google Earth Engine not installed.")
+    print(f"Warning: Google Earth Engine not installed or import error: {e}")
+except Exception as e:
+    HAS_GEE = False
+    print(f"Warning: Google Earth Engine initialization failed: {e}")
 
 
 # Australian UTM zones
@@ -194,306 +144,170 @@ def auto_detect_utm_zone(df):
             
             # Check if in Australia
             if 112 <= test_lon <= 155 and -45 <= test_lat <= -10:
-                calculated_zone = calculate_utm_zone(test_lon, test_lat)
-                if abs(calculated_zone - zone_num) <= 1:
-                    return epsg, zone_num
+                return zone_num
         except:
             continue
     
-    # Default to zone 55 (Victoria)
-    return 'EPSG:32755', 55
+    return None
 
 
-def load_excel_data(file_bytes, sheet_name=0):
-    """Load Excel file from bytes."""
-    df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_name)
-    df.columns = df.columns.astype(str).str.strip()
+def detect_coordinates_system(df):
+    """Detect whether data is in Lat/Lon or UTM."""
+    has_lat = 'Latitude' in df.columns or 'latitude' in df.columns
+    has_lon = 'Longitude' in df.columns or 'longitude' in df.columns
+    has_easting = 'Easting' in df.columns
+    has_northing = 'Northing' in df.columns
+    
+    if has_lat and has_lon:
+        return 'latlon'
+    elif has_easting and has_northing:
+        return 'utm'
+    elif 'x' in df.columns and 'y' in df.columns:
+        # Check if values look like lat/lon or UTM
+        sample_x = df['x'].mean()
+        if -180 <= sample_x <= 180:
+            return 'latlon'
+        elif 100000 <= sample_x <= 1000000:
+            return 'utm'
+    
+    return None
+
+
+def convert_to_latlon(df, coord_system):
+    """Convert coordinates to Lat/Lon for mapping."""
+    df = df.copy()
+    
+    if coord_system == 'latlon':
+        if 'Latitude' in df.columns:
+            df['lat'] = df['Latitude']
+        elif 'latitude' in df.columns:
+            df['lat'] = df['latitude']
+            
+        if 'Longitude' in df.columns:
+            df['lon'] = df['Longitude']
+        elif 'longitude' in df.columns:
+            df['lon'] = df['longitude']
+    elif coord_system == 'utm':
+        # Auto-detect UTM zone
+        zone = auto_detect_utm_zone(df)
+        
+        if zone is None:
+            # Default to zone 55 (Sydney/NSW)
+            zone = 55
+        
+        epsg = f'EPSG:327{zone}'
+        
+        try:
+            transformer = Transformer.from_crs(epsg, "EPSG:4326", always_xy=True)
+            df['lon'], df['lat'] = transformer.transform(
+                df['Easting'].values, 
+                df['Northing'].values
+            )
+        except Exception as e:
+            print(f"Error converting coordinates: {e}")
+            return None
+    
     return df
 
 
-def process_excel_with_llamaparse(file_bytes, api_key, selected_sheets=None):
-    """Use LlamaParse to process Excel file intelligently."""
-    if not HAS_LLAMA_PARSE:
-        return load_excel_data(file_bytes)
+def interpolate_contours(df, parameter, resolution=100):
+    """Create interpolated grid for contour generation."""
+    # Get coordinates
+    lat_col = 'Latitude' if 'Latitude' in df.columns else 'latitude'
+    lon_col = 'Longitude' if 'Longitude' in df.columns else 'longitude'
     
-    os.environ["LLAMA_CLOUD_API_KEY"] = api_key
+    lats = df[lat_col].values
+    lons = df[lon_col].values
+    values = df[parameter].values
     
-    # Save temp file
-    temp_input = "temp_input.xlsx"
-    temp_output = "processed_output.xlsx"
+    # Create grid
+    lon_min, lon_max = lons.min(), lons.max()
+    lat_min, lat_max = lats.min(), lats.max()
     
-    with open(temp_input, "wb") as f:
-        f.write(file_bytes)
+    # Add buffer
+    lon_range = lon_max - lon_min
+    lat_range = lat_max - lat_min
     
-    try:
-        parser = LlamaParse(result_type="markdown", verbose=True)
-        
-        # Parse each selected sheet
-        all_data = []
-        xls = pd.ExcelFile(temp_input)
-        sheets = selected_sheets if selected_sheets else xls.sheet_names
-        
-        for sheet in sheets:
-            df = pd.read_excel(temp_input, sheet_name=sheet)
-            all_data.append(df)
-        
-        # Merge on Well ID if multiple sheets
-        if len(all_data) > 1:
-            final_df = all_data[0]
-            for df in all_data[1:]:
-                if 'Well ID' in final_df.columns and 'Well ID' in df.columns:
-                    final_df = pd.merge(final_df, df, on='Well ID', how='outer', suffixes=('', '_dup'))
-            return final_df
-        return all_data[0] if all_data else pd.DataFrame()
-    
-    finally:
-        # Cleanup temp files
-        if os.path.exists(temp_input):
-            os.remove(temp_input)
-        if os.path.exists(temp_output):
-            os.remove(temp_output)
-
-
-def generate_contour_image(df, value_column, colormap='viridis'):
-    """Generate contour image from data points."""
-    
-    # Determine coordinate columns
-    has_utm = 'Easting' in df.columns and 'Northing' in df.columns
-    has_latlon = 'Latitude' in df.columns and 'Longitude' in df.columns
-    
-    if has_utm:
-        x_col, y_col = 'Easting', 'Northing'
-        use_utm = True
-    elif has_latlon:
-        x_col, y_col = 'Longitude', 'Latitude'
-        use_utm = False
-    else:
-        return None, None, None
-    
-    # Convert to numeric
-    df[x_col] = pd.to_numeric(df[x_col], errors='coerce')
-    df[y_col] = pd.to_numeric(df[y_col], errors='coerce')
-    df[value_column] = pd.to_numeric(df[value_column], errors='coerce')
-    
-    # Drop NaN
-    df = df.dropna(subset=[x_col, y_col, value_column])
-    
-    if len(df) < 3:
-        return None, None, None
-    
-    # Auto-detect UTM zone if needed
-    transformer = None
-    if use_utm:
-        epsg, zone = auto_detect_utm_zone(df)
-        if epsg:
-            transformer = Transformer.from_crs(epsg, "EPSG:4326", always_xy=True)
-    
-    # Create interpolation grid
-    xi = np.linspace(df[x_col].min(), df[x_col].max(), 200)
-    yi = np.linspace(df[y_col].min(), df[y_col].max(), 200)
-    grid_x, grid_y = np.meshgrid(xi, yi)
+    grid_lon = np.linspace(lon_min - lon_range*0.1, lon_max + lon_range*0.1, resolution)
+    grid_lat = np.linspace(lat_min - lat_range*0.1, lat_max + lat_range*0.1, resolution)
+    grid_lon_mesh, grid_lat_mesh = np.meshgrid(grid_lon, grid_lat)
     
     # Interpolate
-    grid_z = griddata((df[x_col], df[y_col]), df[value_column], (grid_x, grid_y), method='linear')
+    try:
+        grid_values = griddata(
+            (lons, lats), 
+            values, 
+            (grid_lon_mesh, grid_lat_mesh), 
+            method='linear'
+        )
+        return grid_lon_mesh, grid_lat_mesh, grid_values
+    except Exception as e:
+        print(f"Interpolation error: {e}")
+        return None, None, None
+
+
+def generate_contour_plot(df, parameter, title=None, colormap='viridis', 
+                          show_contours=True, show_scatter=True):
+    """Generate contour plot from well data."""
+    import matplotlib
+    matplotlib.use('Agg')
     
-    # Calculate bounds
-    min_x, max_x = grid_x.min(), grid_x.max()
-    min_y, max_y = grid_y.min(), grid_y.max()
+    # Detect coordinate system and convert
+    coord_system = detect_coordinates_system(df)
     
-    if use_utm and transformer:
-        min_lon, min_lat = transformer.transform(min_x, min_y)
-        max_lon, max_lat = transformer.transform(max_x, max_y)
-    else:
-        min_lon, min_lat = min_x, min_y
-        max_lon, max_lat = max_x, max_y
+    if coord_system is None:
+        return None, "Could not detect coordinate system"
     
-    image_bounds = [[min_lat, min_lon], [max_lat, max_lon]]
+    df = convert_to_latlon(df, coord_system)
     
-    # Smart contour levels
-    z_min, z_max = df[value_column].min(), df[value_column].max()
-    z_range = z_max - z_min
+    if df is None or 'lat' not in df.columns or 'lon' not in df.columns:
+        return None, "Could not convert coordinates"
     
-    if z_range > 10:
-        interval = 1.0
-    elif z_range > 5:
-        interval = 0.5
-    elif z_range > 2:
-        interval = 0.2
-    else:
-        interval = 0.05
+    # Interpolate
+    grid_lon, grid_lat, grid_values = interpolate_contours(df, parameter)
     
-    levels = np.arange(np.floor(z_min/interval)*interval, np.ceil(z_max/interval)*interval + interval, interval)
+    if grid_values is None:
+        return None, "Interpolation failed"
     
-    # Generate image
-    fig, ax = plt.subplots(figsize=(10, 10))
+    # Create figure
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # Contour plot
+    if show_contours:
+        contour = ax.contourf(grid_lon, grid_lat, grid_values, 
+                             levels=20, cmap=colormap)
+        plt.colorbar(contour, ax=ax, label=parameter)
+        
+        # Contour lines
+        ax.contour(grid_lon, grid_lat, grid_values, 
+                  levels=10, colors='black', linewidths=0.5, alpha=0.5)
+    
+    # Scatter points
+    if show_scatter:
+        ax.scatter(df['lon'], df['lat'], c=df[parameter], 
+                 cmap=colormap, edgecolors='black', linewidth=0.5, s=50)
+    
+    ax.set_xlabel('Longitude')
+    ax.set_ylabel('Latitude')
+    ax.set_title(title or f'{parameter} Distribution')
     ax.set_aspect('equal')
     
-    contour_filled = ax.contourf(grid_x, grid_y, grid_z, levels=levels, cmap=colormap, alpha=0.7)
-    contour_lines = ax.contour(grid_x, grid_y, grid_z, levels=levels, colors='black', linewidths=0.8, alpha=0.8)
-    ax.clabel(contour_lines, inline=True, fontsize=8, fmt='%.2f')
-    
-    ax.axis('off')
-    plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
-    
+    # Save to buffer
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', transparent=True, bbox_inches='tight', pad_inches=0, dpi=300)
-    plt.close()
+    plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
     buf.seek(0)
-    image_base64 = base64.b64encode(buf.read()).decode('utf-8')
     
-    # Get target points (lat/lon)
-    if use_utm and transformer:
-        target_lons, target_lats = transformer.transform(df['Easting'].values, df['Northing'].values)
-    else:
-        target_lons = df['Longitude'].values
-        target_lats = df['Latitude'].values
-    
-    # Get names
-    if 'Well ID' in df.columns:
-        names = df['Well ID'].astype(str).tolist()
-    elif 'Name' in df.columns:
-        names = df['Name'].astype(str).tolist()
-    else:
-        names = [f"Point {i}" for i in range(len(df))]
-    
-    values = df[value_column].tolist()
-    
-    target_points = [
-        {"lat": lat, "lon": lon, "id": i, "name": names[i], "value": values[i]}
-        for i, (lat, lon) in enumerate(zip(target_lats, target_lons))
-    ]
-    
-    return image_base64, image_bounds, target_points
-
-
-# Columns to exclude from parameter selection
-EXCLUDE_KEYWORDS = [
-    'sample date', 'time', 'date', 'easting', 'northing',
-    'lati', 'longi', 'comments', 'well id', 'mga2020',
-    'unknown', 'unit', 'lor', 'guideline', 'trigger'
-]
-
-
-def get_available_parameters(df):
-    """Get available numeric columns for parameter selection."""
-    available = []
-    for col in df.columns:
-        col_lower = col.lower()
-        
-        # Skip excluded keywords
-        if any(kw in col_lower for kw in EXCLUDE_KEYWORDS):
-            continue
-        
-        # Check if numeric
-        values = df[col].head(20)
-        valid_numbers = values.apply(lambda v: not pd.isna(v) and str(v).strip() != '' and 
-                                     not pd.isna(pd.to_numeric(str(v), errors='coerce'))).sum()
-        
-        if valid_numbers / len(values) > 0.3:
-            available.append(col)
-    
-    return available
-
-
-@app.route('/preview', methods=['POST'])
-def preview_file():
-    """Preview Excel file and return available parameters."""
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file provided'}), 400
-    
-    file = request.files['file']
-    file_bytes = file.read()
-    
-    try:
-        # Load workbook to get sheet names
-        xls = pd.ExcelFile(io.BytesIO(file_bytes))
-        sheet_names = xls.sheet_names
-        
-        # Load first sheet for preview
-        df = load_excel_data(file_bytes, sheet_name=0)
-        
-        # Get available parameters
-        available_params = get_available_parameters(df)
-        
-        # Detect coordinate columns
-        lat_cols = [c for c in df.columns if 'lat' in c.lower()]
-        lon_cols = [c for c in df.columns if 'lon' in c.lower() or 'long' in c.lower()]
-        
-        return jsonify({
-            'success': True,
-            'sheetNames': sheet_names,
-            'columns': list(df.columns),
-            'availableParameters': available_params,
-            'latColumns': lat_cols,
-            'lonColumns': lon_cols,
-            'rowCount': len(df),
-            'sampleData': df.head(3).to_dict('records')
-        })
-    
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/process', methods=['POST'])
-def process_file():
-    """Process Excel file and generate map."""
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file provided'}), 400
-    
-    file = request.files['file']
-    parameter = request.form.get('parameter', '')
-    colormap = request.form.get('colormap', 'viridis')
-    use_ai = request.form.get('useAI', 'false').lower() == 'true'
-    api_key = request.form.get('apiKey', '')
-    sheet_name = request.form.get('sheetName', '0')
-    
-    file_bytes = file.read()
-    
-    try:
-        # Process with or without AI
-        if use_ai and HAS_LLAMA_PARSE and api_key:
-            df = process_excel_with_llamaparse(file_bytes, api_key, [sheet_name])
-        else:
-            df = load_excel_data(file_bytes, sheet_name=int(sheet_name) if sheet_name.isdigit() else sheet_name)
-        
-        # Generate contour image
-        image_base64, bounds, points = generate_contour_image(df, parameter, colormap)
-        
-        if not image_base64:
-            return jsonify({'error': 'Failed to generate contour. Check your data.'}), 400
-        
-        return jsonify({
-            'success': True,
-            'imageBase64': image_base64,
-            'bounds': bounds,
-            'points': points,
-            'parameter': parameter,
-            'colormap': colormap
-        })
-    
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return buf, None
 
 
 @app.route('/debug', methods=['GET'])
 def debug():
     """Debug endpoint to check GEE initialization status"""
     debug_info = {
-        'gee_available': 'ee' in globals(),
+        'gee_available': 'ee' in dir(),
         'gee_initialized': HAS_GEE,
-        'secret_file_path': '/etc/secrets/gee-service-account.json',
-        'secret_file_exists': os.path.exists('/etc/secrets/gee-service-account.json'),
     }
-    
-    # Check all files in /etc/secrets
-    try:
-        secrets_dir = '/etc/secrets'
-        if os.path.exists(secrets_dir):
-            debug_info['secrets_files'] = os.listdir(secrets_dir)
-        else:
-            debug_info['secrets_files'] = 'Directory does not exist'
-    except Exception as e:
-        debug_info['secrets_files'] = str(e)
     
     return jsonify(debug_info)
 
@@ -513,6 +327,221 @@ def health():
         'llamaparse': HAS_LLAMA_PARSE,
         'gee': HAS_GEE
     })
+
+
+def parse_excel_file(file_content, use_llamaparse=True):
+    """Parse Excel file using LlamaParse or pandas."""
+    df = None
+    parse_method = 'basic'
+    
+    if use_llamaparse and HAS_LLAMA_PARSE:
+        try:
+            from llama_parse import LlamaParse
+            parsing_instruction = "Extract all data from this Excel file. Return all rows and columns with their exact values."
+            parser = LlamaParse(parsing_instruction=parsing_instruction, result_type="markdown")
+            
+            # Save to temp file
+            with open('/tmp/temp_excel.xlsx', 'wb') as f:
+                f.write(file_content)
+            
+            # Parse
+            results = parser.load_data('/tmp/temp_excel.xlsx')
+            
+            if results and len(results) > 0:
+                # Get markdown table
+                markdown_data = results[0].text
+                parse_method = 'llamaparse'
+                
+                # Convert markdown table to dataframe
+                import re
+                lines = markdown_data.strip().split('\n')
+                header_row = None
+                data_rows = []
+                
+                for line in lines:
+                    if '|' in line:
+                        cols = [c.strip() for c in line.split('|') if c.strip()]
+                        if not cols:
+                            continue
+                        # Check if it's a separator line
+                        if all(set(c.replace('-', '').replace('.', '')) <= {' '} for c in cols if c):
+                            continue
+                        if header_row is None:
+                            header_row = cols
+                        else:
+                            if len(cols) == len(header_row):
+                                data_rows.append(cols)
+                
+                if header_row and data_rows:
+                    df = pd.DataFrame(data_rows, columns=header_row)
+                    
+                    # Convert numeric columns
+                    for col in df.columns:
+                        try:
+                            df[col] = pd.to_numeric(df[col])
+                        except:
+                            pass
+        except Exception as e:
+            print(f"LlamaParse error: {e}")
+    
+    # Fallback to pandas
+    if df is None:
+        try:
+            df = pd.read_excel(io.BytesIO(file_content))
+            parse_method = 'pandas'
+        except Exception as e:
+            return None, str(e)
+    
+    return df, parse_method
+
+
+@app.route('/preview', methods=['POST'])
+def preview():
+    """Preview uploaded Excel file - returns data summary."""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            return jsonify({'error': 'Only Excel files supported'}), 400
+        
+        # Read file content
+        file_content = file.read()
+        
+        # Parse
+        use_llamaparse = request.form.get('use_llamaparse', 'true').lower() == 'true'
+        df, parse_method = parse_excel_file(file_content, use_llamaparse)
+        
+        if df is None:
+            return jsonify({'error': parse_method}), 400
+        
+        # Get summary
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        all_cols = df.columns.tolist()
+        
+        # Get first few rows
+        preview_data = df.head(10).to_dict(orient='records')
+        
+        # Sample stats for numeric columns
+        stats = {}
+        for col in numeric_cols:
+            stats[col] = {
+                'min': float(df[col].min()) if not pd.isna(df[col].min()) else None,
+                'max': float(df[col].max()) if not pd.isna(df[col].max()) else None,
+                'mean': float(df[col].mean()) if not pd.isna(df[col].mean()) else None
+            }
+        
+        return jsonify({
+            'columns': all_cols,
+            'numeric_columns': numeric_cols,
+            'row_count': len(df),
+            'preview': preview_data,
+            'stats': stats,
+            'parse_method': parse_method
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/process', methods=['POST'])
+def process():
+    """Process Excel file and generate map."""
+    try:
+        data = request.get_json()
+        
+        if 'file_content' not in data:
+            return jsonify({'error': 'No file content provided'}), 400
+        
+        if 'parameter' not in data:
+            return jsonify({'error': 'No parameter specified'}), 400
+        
+        # Decode base64 file content
+        try:
+            file_content = base64.b64decode(data['file_content'])
+        except Exception as e:
+            return jsonify({'error': f'Invalid file content: {e}'}), 400
+        
+        parameter = data['parameter']
+        colormap = data.get('colormap', 'viridis')
+        show_contours = data.get('show_contours', True)
+        show_scatter = data.get('show_scatter', True)
+        
+        # Parse Excel
+        use_llamaparse = data.get('use_llamaparse', True)
+        df, parse_method = parse_excel_file(file_content, use_llamaparse)
+        
+        if df is None:
+            return jsonify({'error': parse_method}), 400
+        
+        # Check if parameter exists
+        if parameter not in df.columns:
+            available = df.columns.tolist()
+            return jsonify({
+                'error': f'Parameter {parameter} not found in data',
+                'available_parameters': available
+            }), 400
+        
+        # Check if coordinates exist
+        coord_system = detect_coordinates_system(df)
+        if coord_system is None:
+            return jsonify({
+                'error': 'Could not detect coordinate system',
+                'hint': 'Ensure data has Latitude/Longitude or Easting/Northing columns'
+            }), 400
+        
+        # Convert to lat/lon
+        df = convert_to_latlon(df, coord_system)
+        
+        if df is None or 'lat' not in df.columns or 'lon' not in df.columns:
+            return jsonify({'error': 'Could not convert coordinates to lat/lon'}), 400
+        
+        # Generate contour plot
+        plot_buf, error = generate_contour_plot(
+            df, parameter, 
+            title=f'{parameter} Distribution',
+            colormap=colormap,
+            show_contours=show_contours,
+            show_scatter=show_scatter
+        )
+        
+        if error:
+            return jsonify({'error': error}), 400
+        
+        # Convert to base64
+        plot_base64 = base64.b64encode(plot_buf.getvalue()).decode('utf-8')
+        
+        # Return result
+        result = {
+            'image': plot_base64,
+            'parameter': parameter,
+            'colormap': colormap,
+            'parse_method': parse_method,
+            'coord_system': coord_system,
+            'row_count': len(df)
+        }
+        
+        # If GEE is available, add satellite imagery
+        if HAS_GEE:
+            try:
+                # Get bounds
+                bounds = {
+                    'north': float(df['lat'].max()),
+                    'south': float(df['lat'].min()),
+                    'east': float(df['lon'].max()),
+                    'west': float(df['lon'].min())
+                }
+                result['gee_available'] = True
+                result['bounds'] = bounds
+            except Exception as e:
+                print(f"GEE bounds error: {e}")
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':
