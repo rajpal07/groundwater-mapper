@@ -31,50 +31,46 @@ except ImportError:
 
 try:
     import ee
-    # Initialize Google Earth Engine with service account
+    # Initialize Google Earth Engine - support both base64 encoded and regular JSON
+    service_account_b64 = os.environ.get('GOOGLE_EE_SERVICE_ACCOUNT_B64')
     service_account = os.environ.get('GOOGLE_EE_SERVICE_ACCOUNT')
-    if service_account:
+    
+    if service_account_b64:
+        try:
+            # Decode base64 to JSON string
+            json_str = base64.b64decode(service_account_b64).decode('utf-8')
+            credentials = json.loads(json_str)
+            
+            credentials_obj = ee.ServiceAccountCredentials(
+                credentials['client_email'],
+                private_key=credentials['private_key']
+            )
+            ee.Initialize(credentials_obj)
+            HAS_GEE = True
+            print("Google Earth Engine initialized successfully from base64!")
+        except Exception as e:
+            print(f"Warning: Failed to initialize GEE from base64: {e}")
+            HAS_GEE = False
+    elif service_account:
         try:
             import json
             # Clean up the service account JSON string
-            # Handle various encoding issues that can occur in environment variables
+            # Handle escaped newlines first
+            service_account = service_account.replace('\\n', '\n').replace('\\\\n', '\n')
             
-            # Print debug info (first 200 chars, sanitized)
-            debug_preview = service_account[:200]
-            print(f"DEBUG: Service account preview: {repr(debug_preview)}")
-            
-            # Step 1: Handle escaped newlines (\n -> actual newlines)
-            # Note: The input has literal \\n (backslash-n), convert to actual newline
-            service_account = service_account.replace('\\n', '\n').replace('\\n', '\n')
-            
-            # Step 2: Handle escaped quotes
-            service_account = service_account.replace('\\"', '"')
-            
-            # Step 3: Remove any carriage returns
-            service_account = service_account.replace('\r', '')
-            
-            # Step 4: Remove any control characters except newlines and tabs
+            # Remove any control characters except newlines and tabs
             cleaned = []
             for i, char in enumerate(service_account):
                 code = ord(char)
-                # Allow: printable chars (32-126), newlines (10), tabs (9)
                 if code >= 32 or code in (9, 10):
                     cleaned.append(char)
-                else:
-                    print(f"DEBUG: Removing control char at position {i}: {repr(char)} (code {code})")
             service_account = ''.join(cleaned)
             
-            # Step 5: Handle any other escaped characters
-            service_account = service_account.encode().decode('unicode_escape', errors='ignore')
-            
-            # Try to parse as JSON
             credentials = json.loads(service_account)
             
-            # Ensure the private key has proper newlines
             if 'private_key' in credentials:
-                credentials['private_key'] = credentials['private_key'].replace('\\n', '\n').replace('\\n', '\n')
+                credentials['private_key'] = credentials['private_key'].replace('\\n', '\n').replace('\\\\n', '\n')
             
-            # Use service account credentials properly
             credentials_obj = ee.ServiceAccountCredentials(
                 credentials['client_email'],
                 private_key=credentials['private_key']
@@ -87,6 +83,7 @@ try:
             HAS_GEE = False
     else:
         HAS_GEE = False
+        print("No GEE credentials provided")
 except ImportError:
     HAS_GEE = False
     print("Warning: Google Earth Engine not installed.")
