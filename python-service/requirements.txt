@@ -1,0 +1,15 @@
+flask==3.0.0
+flask-cors==4.0.0
+pandas==2.1.4
+numpy==1.26.2
+scipy==1.11.4
+matplotlib==3.8.2
+pyproj==3.6.1
+openpyxl==3.1.2
+python-dotenv==1.0.0
+
+# Optional: LlamaCloud
+# llama-parse==0.1.0
+
+# Optional: Google Earth Engine
+# earthengine-api==0.1.374
