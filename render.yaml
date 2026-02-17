@@ -1,10 +1,8 @@
 # Render.com deployment configuration
-# Save this in the ROOT of your repo (groundwater-mapper_pushed/render.yaml)
 
 services:
   - type: web
     name: groundwater-mapper-api
-    repo: https://github.com/rajpal07/groundwater-mapper
     branch: nextjs-firebase
     root: python-service
     env: python
@@ -14,9 +12,3 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
-      - key: LLAMA_CLOUD_API_KEY
-        # Add your LlamaCloud API key in Render dashboard
-        sync: false
-      - key: GOOGLE_EE_SERVICE_ACCOUNT
-        # Add your Google EE service account JSON in Render dashboard
-        sync: false
