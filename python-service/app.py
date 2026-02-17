@@ -36,9 +36,25 @@ try:
     if service_account:
         try:
             import json
-            # Handle escaped newlines in the JSON string
+            # Clean up the service account JSON string
+            # Handle various encoding issues that can occur in environment variables
+            service_account = service_account.strip()
+            
+            # First, handle escaped newlines (\n -> actual newlines)
             service_account = service_account.replace('\\n', '\n')
+            
+            # Handle escaped quotes
+            service_account = service_account.replace('\\"', '"')
+            
+            # Handle any other escaped characters
+            service_account = service_account.encode().decode('unicode_escape', errors='ignore')
+            
+            # Try to parse as JSON
             credentials = json.loads(service_account)
+            
+            # Ensure the private key has proper newlines
+            if 'private_key' in credentials:
+                credentials['private_key'] = credentials['private_key'].replace('\\n', '\n')
             
             # Use service account credentials properly
             credentials_obj = ee.ServiceAccountCredentials(
