@@ -304,8 +304,10 @@ def generate_contour_plot(df, parameter, title=None, colormap='viridis',
 @app.route('/debug', methods=['GET'])
 def debug():
     """Debug endpoint to check GEE initialization status"""
+    # Note: 'ee' may not be in dir() because it's imported inside a try block
+    # The HAS_GEE variable is the authoritative source
     debug_info = {
-        'gee_available': 'ee' in dir(),
+        'gee_available': HAS_GEE,  # Check the HAS_GEE flag instead
         'gee_initialized': HAS_GEE,
     }
     
