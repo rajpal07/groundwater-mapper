@@ -44,7 +44,8 @@ try:
             print(f"DEBUG: Service account preview: {repr(debug_preview)}")
             
             # Step 1: Handle escaped newlines (\n -> actual newlines)
-            service_account = service_account.replace('\\n', '\n')
+            # Note: The input has literal \\n (backslash-n), convert to actual newline
+            service_account = service_account.replace('\\n', '\n').replace('\\n', '\n')
             
             # Step 2: Handle escaped quotes
             service_account = service_account.replace('\\"', '"')
@@ -52,9 +53,7 @@ try:
             # Step 3: Remove any carriage returns
             service_account = service_account.replace('\r', '')
             
-            # Step 4: Remove any literal newlines that aren't in quoted strings
-            # This is tricky - we need to handle the case where the private key has newlines
-            # First, let's try to find and fix any control characters
+            # Step 4: Remove any control characters except newlines and tabs
             cleaned = []
             for i, char in enumerate(service_account):
                 code = ord(char)
@@ -73,7 +72,7 @@ try:
             
             # Ensure the private key has proper newlines
             if 'private_key' in credentials:
-                credentials['private_key'] = credentials['private_key'].replace('\\n', '\n')
+                credentials['private_key'] = credentials['private_key'].replace('\\n', '\n').replace('\\n', '\n')
             
             # Use service account credentials properly
             credentials_obj = ee.ServiceAccountCredentials(
