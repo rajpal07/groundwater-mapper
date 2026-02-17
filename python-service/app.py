@@ -37,7 +37,7 @@ try:
         try:
             import json
             credentials = json.loads(service_account)
-            ee.Initialize(credentials)
+            ee.Initialize(credentials=credentials)
             HAS_GEE = True
             print("Google Earth Engine initialized successfully!")
         except Exception as e:
@@ -373,6 +373,14 @@ def process_file():
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/', methods=['GET', 'HEAD'])
+def index():
+    return jsonify({
+        'message': 'Groundwater Mapper API',
+        'endpoints': ['/health', '/preview', '/process']
+    })
 
 
 @app.route('/health', methods=['GET'])
