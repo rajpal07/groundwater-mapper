@@ -38,15 +38,34 @@ try:
             import json
             # Clean up the service account JSON string
             # Handle various encoding issues that can occur in environment variables
-            service_account = service_account.strip()
             
-            # First, handle escaped newlines (\n -> actual newlines)
+            # Print debug info (first 200 chars, sanitized)
+            debug_preview = service_account[:200]
+            print(f"DEBUG: Service account preview: {repr(debug_preview)}")
+            
+            # Step 1: Handle escaped newlines (\n -> actual newlines)
             service_account = service_account.replace('\\n', '\n')
             
-            # Handle escaped quotes
+            # Step 2: Handle escaped quotes
             service_account = service_account.replace('\\"', '"')
             
-            # Handle any other escaped characters
+            # Step 3: Remove any carriage returns
+            service_account = service_account.replace('\r', '')
+            
+            # Step 4: Remove any literal newlines that aren't in quoted strings
+            # This is tricky - we need to handle the case where the private key has newlines
+            # First, let's try to find and fix any control characters
+            cleaned = []
+            for i, char in enumerate(service_account):
+                code = ord(char)
+                # Allow: printable chars (32-126), newlines (10), tabs (9)
+                if code >= 32 or code in (9, 10):
+                    cleaned.append(char)
+                else:
+                    print(f"DEBUG: Removing control char at position {i}: {repr(char)} (code {code})")
+            service_account = ''.join(cleaned)
+            
+            # Step 5: Handle any other escaped characters
             service_account = service_account.encode().decode('unicode_escape', errors='ignore')
             
             # Try to parse as JSON
