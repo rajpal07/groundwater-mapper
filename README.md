@@ -183,6 +183,88 @@ Your Excel file should have the following structure:
 | `NEXTAUTH_SECRET` | Secret for session encryption |
 | `GOOGLE_CLIENT_ID` | Google OAuth Client ID |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret |
+| `NEXT_PUBLIC_PYTHON_SERVICE_URL` | Python microservice URL (required for files > 4.5MB) |
+| `FIREBASE_SERVICE_ACCOUNT_PATH` | Path to Firebase service account JSON |
+
+## Python Microservice
+
+The application uses a Python microservice for advanced data processing. This is **required** when:
+
+1. Files larger than 4.5MB are uploaded (Vercel's serverless function limit)
+2. Advanced Excel parsing with LlamaParse is needed
+3. Google Earth Engine integration is required
+
+### Setting up the Python Service
+
+1. Navigate to the python-service directory:
+```bash
+cd python-service
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Run the service:
+```bash
+python app.py
+```
+
+The service will run on `http://localhost:5000` by default.
+
+### Deploying Python Service to Render
+
+1. Create a new Web Service on Render
+2. Connect your repository
+3. Set the following:
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `gunicorn app:app`
+4. Add environment variables for GEE and LlamaParse if needed
+
+### Configuring the Next.js App
+
+Set the `NEXT_PUBLIC_PYTHON_SERVICE_URL` environment variable:
+
+```env
+# Local development
+NEXT_PUBLIC_PYTHON_SERVICE_URL="http://localhost:5000"
+
+# Production (Render)
+NEXT_PUBLIC_PYTHON_SERVICE_URL="https://your-python-service.onrender.com"
+```
+
+## Vercel Deployment Notes
+
+### File Size Limit
+
+**Important**: Vercel has a **hard limit of 4.5MB** for serverless function request bodies. This limit **cannot be increased**.
+
+For files larger than 4.5MB, the application automatically:
+1. Detects the file size before upload
+2. Uploads directly to the Python microservice (bypassing Vercel)
+3. Returns the processed data to the frontend
+
+This is why the `NEXT_PUBLIC_PYTHON_SERVICE_URL` environment variable is critical for production deployments.
+
+### Recommended Vercel Configuration
+
+Create a `vercel.json` file in your project root:
+
+```json
+{
+  "functions": {
+    "app/api/preview/route.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "app/api/process/route.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  }
+}
+```
 
 ## License
 

@@ -14,6 +14,24 @@ interface PreviewData {
     sampleData: any[]
 }
 
+// Vercel has a hard limit of 4.5MB for serverless function request bodies
+// Files larger than 4MB should be uploaded directly to Python service
+const VERCEL_SAFE_LIMIT = 4 * 1024 * 1024 // 4MB (slightly under 4.5MB limit)
+
+// Python service URL - will be fetched from API
+const getPythonServiceUrl = async (): Promise<string | null> => {
+    try {
+        const response = await fetch('/api/preview')
+        if (response.ok) {
+            const data = await response.json()
+            return data.pythonServiceUrl
+        }
+    } catch (err) {
+        console.error('Error fetching Python service URL:', err)
+    }
+    return null
+}
+
 export default function NewMapPage() {
     const { id: projectId } = useParams()
     const router = useRouter()
@@ -53,8 +71,67 @@ export default function NewMapPage() {
         setPreviewData(null)
 
         try {
-            const token = await user!.getIdToken()
+            // Check if user is authenticated
+            if (!user) {
+                throw new Error('You must be signed in to upload files')
+            }
 
+            const token = await user.getIdToken()
+
+            // Check if file is large - upload directly to Python service
+            if (fileToUpload.size > VERCEL_SAFE_LIMIT) {
+                console.log('[Frontend] File is large (', fileToUpload.size, 'bytes), using direct Python service upload')
+                const pythonUrl = await getPythonServiceUrl()
+
+                if (!pythonUrl) {
+                    throw new Error('File is too large for Vercel (limit 4.5MB) and Python service is not configured. Please use a smaller file or contact support.')
+                }
+
+                console.log('[Frontend] Uploading directly to Python service:', pythonUrl)
+
+                // Upload directly to Python service
+                const formData = new FormData()
+                formData.append('file', fileToUpload)
+                formData.append('use_llamaparse', 'true')
+
+                const response = await fetch(`${pythonUrl}/preview`, {
+                    method: 'POST',
+                    body: formData
+                })
+
+                if (!response.ok) {
+                    const errorText = await response.text()
+                    throw new Error(`Python service error: ${errorText.substring(0, 100)}`)
+                }
+
+                const data = await response.json()
+                console.log('[Frontend] Python service response:', data)
+
+                setPreviewData({
+                    sheets: data.sheets || [],
+                    columns: data.columns || [],
+                    availableParameters: data.numeric_columns || [],
+                    rowCount: data.row_count || 0,
+                    sampleData: data.preview || []
+                })
+
+                // Auto-select first sheet if available
+                const sheets = data.sheets || []
+                if (sheets.length > 0) {
+                    setSelectedSheet(sheets[0])
+                }
+
+                // Auto-select first available parameter if any
+                if (data.numeric_columns && data.numeric_columns.length > 0) {
+                    setParameter(data.numeric_columns[0])
+                } else if (data.columns && data.columns.length > 0) {
+                    setParameter(data.columns[0])
+                }
+
+                return
+            }
+
+            // For smaller files, use the normal API route
             const formData = new FormData()
             formData.append('file', fileToUpload)
 
@@ -65,6 +142,48 @@ export default function NewMapPage() {
                 },
                 body: formData
             })
+
+            // Handle 413 error - file too large
+            if (response.status === 413) {
+                const data = await response.json()
+                if (data.requiresDirectUpload && data.pythonServiceUrl) {
+                    console.log('[Frontend] Got 413, retrying with direct Python service upload')
+                    // Retry with direct upload to Python service
+                    const pythonFormData = new FormData()
+                    pythonFormData.append('file', fileToUpload)
+                    pythonFormData.append('use_llamaparse', 'true')
+
+                    const pythonResponse = await fetch(`${data.pythonServiceUrl}/preview`, {
+                        method: 'POST',
+                        body: pythonFormData
+                    })
+
+                    if (!pythonResponse.ok) {
+                        const errorText = await pythonResponse.text()
+                        throw new Error(`Python service error: ${errorText.substring(0, 100)}`)
+                    }
+
+                    const pythonData = await pythonResponse.json()
+                    setPreviewData({
+                        sheets: pythonData.sheets || [],
+                        columns: pythonData.columns || [],
+                        availableParameters: pythonData.numeric_columns || [],
+                        rowCount: pythonData.row_count || 0,
+                        sampleData: pythonData.preview || []
+                    })
+
+                    const sheets = pythonData.sheets || []
+                    if (sheets.length > 0) {
+                        setSelectedSheet(sheets[0])
+                    }
+
+                    if (pythonData.numeric_columns && pythonData.numeric_columns.length > 0) {
+                        setParameter(pythonData.numeric_columns[0])
+                    }
+                    return
+                }
+                throw new Error(data.error || 'File too large')
+            }
 
             if (!response.ok) {
                 const data = await response.json()
@@ -121,7 +240,12 @@ export default function NewMapPage() {
         setError('')
 
         try {
-            const token = await user!.getIdToken()
+            // Check if user is authenticated
+            if (!user) {
+                throw new Error('You must be signed in to create maps')
+            }
+
+            const token = await user.getIdToken()
 
             // Step 1: Create the map first
             const createResponse = await fetch(`/api/projects/${projectId}/maps`, {
@@ -143,6 +267,44 @@ export default function NewMapPage() {
 
             // Step 2: Upload the file
             setUploading(true)
+
+            // Check if file is large - upload directly to Python service
+            if (file.size > VERCEL_SAFE_LIMIT) {
+                console.log('[Frontend] File is large for processing, using direct Python service upload')
+                const pythonUrl = await getPythonServiceUrl()
+
+                if (!pythonUrl) {
+                    throw new Error('File is too large for Vercel (limit 4.5MB) and Python service is not configured.')
+                }
+
+                console.log('[Frontend] Processing directly via Python service:', pythonUrl)
+
+                const formData = new FormData()
+                formData.append('file', file)
+                formData.append('parameter', parameter)
+                formData.append('colormap', colormap)
+
+                const processResponse = await fetch(`${pythonUrl}/process`, {
+                    method: 'POST',
+                    body: formData
+                })
+
+                if (!processResponse.ok) {
+                    const errorText = await processResponse.text()
+                    throw new Error(`Python service error: ${errorText.substring(0, 100)}`)
+                }
+
+                const result = await processResponse.json()
+                console.log('[Frontend] Python process result:', result)
+
+                // TODO: Save result to Firebase via API
+
+                // Redirect to the map detail page
+                router.push(`/dashboard/projects/${projectId}/maps/${mapId}`)
+                return
+            }
+
+            // For smaller files, use the normal API route
             const formData = new FormData()
             formData.append('file', file)
             formData.append('mapId', mapId)
@@ -160,6 +322,34 @@ export default function NewMapPage() {
                 },
                 body: formData
             })
+
+            // Handle 413 error - file too large
+            if (uploadResponse.status === 413) {
+                const data = await uploadResponse.json()
+                if (data.requiresDirectUpload && data.pythonServiceUrl) {
+                    console.log('[Frontend] Got 413 on process, retrying with direct Python service upload')
+
+                    const pythonFormData = new FormData()
+                    pythonFormData.append('file', file)
+                    pythonFormData.append('parameter', parameter)
+                    pythonFormData.append('colormap', colormap)
+
+                    const pythonResponse = await fetch(`${data.pythonServiceUrl}/process`, {
+                        method: 'POST',
+                        body: pythonFormData
+                    })
+
+                    if (!pythonResponse.ok) {
+                        const errorText = await pythonResponse.text()
+                        throw new Error(`Python service error: ${errorText.substring(0, 100)}`)
+                    }
+
+                    // Success - redirect to map detail page
+                    router.push(`/dashboard/projects/${projectId}/maps/${mapId}`)
+                    return
+                }
+                throw new Error(data.error || 'File too large')
+            }
 
             if (!uploadResponse.ok) {
                 const data = await uploadResponse.json()

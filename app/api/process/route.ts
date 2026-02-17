@@ -1,18 +1,64 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { verifyIdToken } from '@/lib/firebase-admin'
 import { getUserProjects, createMap, updateMap } from '@/lib/firebase-admin'
 import * as XLSX from 'xlsx'
 
+// Python microservice URL
+const PYTHON_SERVICE_URL = process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL
+
 export const dynamic = 'force-dynamic'
 
+// Vercel has a hard limit of 4.5MB for serverless function request bodies
+const VERCEL_LIMIT = 4.5 * 1024 * 1024 // 4.5MB in bytes
+
+// Helper function to verify Firebase ID token from Authorization header
+async function getAuthenticatedUserId(request: Request): Promise<string | null> {
+    const authHeader = request.headers.get('Authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        console.log('[Auth] No Bearer token in Authorization header')
+        return null
+    }
+
+    const idToken = authHeader.substring(7) // Remove 'Bearer ' prefix
+    console.log('[Auth] Verifying ID token...')
+
+    const decodedToken = await verifyIdToken(idToken)
+    if (!decodedToken) {
+        console.log('[Auth] Token verification failed')
+        return null
+    }
+
+    console.log('[Auth] Token verified for user:', decodedToken.uid)
+    return decodedToken.uid
+}
+
 export async function POST(request: Request): Promise<NextResponse> {
+    console.log('[Process API] Request received')
+    console.log('[Process API] Python Service URL:', PYTHON_SERVICE_URL || 'NOT CONFIGURED')
+
     try {
-        const session = await getServerSession(authOptions)
-        const userId = session?.user?.email
+        // Verify Firebase ID token from Authorization header
+        const userId = await getAuthenticatedUserId(request)
 
         if (!userId) {
+            console.log('[Process API] Unauthorized - no valid token')
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
+        // Check content length before processing
+        const contentLength = request.headers.get('content-length')
+        const fileSize = contentLength ? parseInt(contentLength, 10) : 0
+        console.log('[Process API] Request content length:', fileSize, 'bytes (~', Math.round(fileSize / 1024 / 1024 * 100) / 100, 'MB)')
+
+        if (fileSize > VERCEL_LIMIT) {
+            console.log('[Process API] File exceeds Vercel limit')
+            return NextResponse.json({
+                error: 'File too large for Vercel (limit 4.5MB). Please use direct upload to Python service.',
+                pythonServiceUrl: PYTHON_SERVICE_URL,
+                fileSize: fileSize,
+                limit: VERCEL_LIMIT,
+                requiresDirectUpload: true
+            }, { status: 413 })
         }
 
         const formData = await request.formData()
@@ -23,7 +69,11 @@ export async function POST(request: Request): Promise<NextResponse> {
         const mapId = formData.get('mapId') as string
         const useAIProcessing = formData.get('useAIProcessing') === 'true'
 
+        console.log('[Process API] File:', file?.name, 'size:', file?.size)
+        console.log('[Process API] Parameter:', parameter, 'Project:', projectId, 'Map:', mapId)
+
         if (!file || !parameter || !projectId) {
+            console.log('[Process API] Missing required fields')
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
         }
 
@@ -32,10 +82,57 @@ export async function POST(request: Request): Promise<NextResponse> {
         const project = projects.find(p => p.id === projectId)
 
         if (!project) {
+            console.log('[Process API] Project not found:', projectId)
             return NextResponse.json({ error: 'Project not found' }, { status: 404 })
         }
 
-        // Read and process Excel file
+        // If Python service URL is configured and file is large, use Python service
+        if (PYTHON_SERVICE_URL && file.size > VERCEL_LIMIT) {
+            console.log('[Process API] File large, using Python service')
+            try {
+                const buffer = Buffer.from(await file.arrayBuffer())
+                const pythonFormData = new FormData()
+                pythonFormData.append('file', new Blob([buffer]), file.name)
+                pythonFormData.append('parameter', parameter)
+                pythonFormData.append('colormap', colormap)
+
+                const pythonResponse = await fetch(`${PYTHON_SERVICE_URL}/process`, {
+                    method: 'POST',
+                    body: pythonFormData
+                })
+
+                if (pythonResponse.ok) {
+                    const pythonData = await pythonResponse.json()
+                    // Save map to Firebase
+                    await updateMap(userId, projectId, mapId, {
+                        parameter,
+                        colormap,
+                        dataPoints: pythonData.dataPoints || pythonData.data?.length || 0,
+                        statistics: pythonData.statistics,
+                        status: 'complete',
+                        processedAt: new Date().toISOString()
+                    })
+
+                    return NextResponse.json({
+                        success: true,
+                        mapId: mapId,
+                        data: pythonData.data,
+                        statistics: pythonData.statistics,
+                        colorScale: pythonData.colorScale,
+                        contourData: pythonData.contourData,
+                        bounds: pythonData.bounds,
+                        availableParameters: pythonData.availableParameters,
+                        source: 'python'
+                    })
+                }
+            } catch (pythonError) {
+                console.error('[Process API] Python service error:', pythonError)
+                // Fall through to Node.js implementation
+            }
+        }
+
+        // Read and process Excel file (Node.js implementation)
+        console.log('[Process API] Using Node.js implementation')
         const buffer = Buffer.from(await file.arrayBuffer())
         const workbook = XLSX.read(buffer, { type: 'buffer' })
         const sheetName = workbook.SheetNames[0]
@@ -91,6 +188,8 @@ export async function POST(request: Request): Promise<NextResponse> {
             processedAt: new Date().toISOString()
         })
 
+        console.log('[Process API] Success, processed', processedData.length, 'data points')
+
         return NextResponse.json({
             success: true,
             mapId: mapId,
@@ -102,7 +201,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             availableParameters: numericColumns
         })
     } catch (error: any) {
-        console.error('Error processing map:', error)
+        console.error('[Process API] Error:', error)
         return NextResponse.json({ error: error.message || 'Failed to process map' }, { status: 500 })
     }
 }

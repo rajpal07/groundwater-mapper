@@ -1,0 +1,16 @@
+{
+    "functions": {
+        "app/api/preview/route.ts": {
+            "maxDuration": 60,
+            "memory": 1024
+        },
+        "app/api/process/route.ts": {
+            "maxDuration": 60,
+            "memory": 1024
+        },
+        "app/api/maps/route.ts": {
+            "maxDuration": 60,
+            "memory": 1024
+        }
+    }
+}

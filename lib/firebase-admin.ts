@@ -46,8 +46,12 @@ if (isServer) {
 // Verify ID token helper
 export async function verifyIdToken(idToken: string): Promise<any> {
     try {
-        const auth = getAdminAuth()
-        const decodedToken = await auth.verifyIdToken(idToken)
+        // Check if adminAuth is initialized
+        if (!adminAuth) {
+            console.error('Firebase Admin Auth not initialized - check FIREBASE_SERVICE_ACCOUNT_KEY environment variable')
+            return null
+        }
+        const decodedToken = await adminAuth.verifyIdToken(idToken)
         return decodedToken
     } catch (error) {
         console.error('Token verification error:', error)

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { verifyIdToken } from '@/lib/firebase-admin'
 import * as XLSX from 'xlsx'
 
 // Python microservice URL - set in environment variables
@@ -34,28 +33,99 @@ const LAT_COLUMNS = ['latitude', 'lat', 'y']
 const LON_COLUMNS = ['longitude', 'lon', 'long', 'lng', 'x', 'easting']
 const WELL_ID_COLUMNS = ['well id', 'wellid', 'well', 'site', 'site id', 'location']
 
+// Helper function to verify Firebase ID token from Authorization header
+async function getAuthenticatedUserId(request: Request): Promise<string | null> {
+    const authHeader = request.headers.get('Authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        console.log('[Auth] No Bearer token in Authorization header')
+        return null
+    }
+
+    const idToken = authHeader.substring(7) // Remove 'Bearer ' prefix
+    console.log('[Auth] Verifying ID token...')
+
+    const decodedToken = await verifyIdToken(idToken)
+    if (!decodedToken) {
+        console.log('[Auth] Token verification failed')
+        return null
+    }
+
+    console.log('[Auth] Token verified for user:', decodedToken.uid)
+    return decodedToken.uid
+}
+
+// Vercel has a hard limit of 4.5MB for serverless function request bodies
+// This endpoint now primarily returns the Python service URL for direct uploads
+// and only processes small files locally as fallback
+
+export async function GET(): Promise<NextResponse> {
+    // Return the Python service URL so frontend can upload directly
+    return NextResponse.json({
+        pythonServiceUrl: PYTHON_SERVICE_URL || null,
+        message: PYTHON_SERVICE_URL
+            ? 'Use the Python service URL for direct file upload to avoid Vercel size limits'
+            : 'Python service not configured'
+    })
+}
+
 export async function POST(request: Request): Promise<NextResponse> {
+    console.log('[Preview API] Request received')
+    console.log('[Preview API] Python Service URL:', PYTHON_SERVICE_URL || 'NOT CONFIGURED')
+
     try {
-        const session = await getServerSession(authOptions)
-        const userId = session?.user?.email
+        // Verify Firebase ID token from Authorization header
+        const userId = await getAuthenticatedUserId(request)
 
         if (!userId) {
+            console.log('[Preview API] Unauthorized - no valid token')
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
+        // Check content length before processing
+        const contentLength = request.headers.get('content-length')
+        const fileSize = contentLength ? parseInt(contentLength, 10) : 0
+        console.log('[Preview API] Request content length:', fileSize, 'bytes (~', Math.round(fileSize / 1024 / 1024 * 100) / 100, 'MB)')
+
+        // Vercel limit is 4.5MB - if file is larger, we need to use Python service directly
+        const VERCEL_LIMIT = 4.5 * 1024 * 1024 // 4.5MB in bytes
+
+        if (fileSize > VERCEL_LIMIT) {
+            console.log('[Preview API] File exceeds Vercel limit, Python service required')
+            if (!PYTHON_SERVICE_URL) {
+                return NextResponse.json({
+                    error: 'File too large for Vercel (limit 4.5MB). Python service not configured.',
+                    fileSize: fileSize,
+                    limit: VERCEL_LIMIT,
+                    pythonServiceUrl: null
+                }, { status: 413 })
+            }
+            // Return info so frontend can upload directly to Python service
+            return NextResponse.json({
+                error: 'File too large. Please use direct upload to Python service.',
+                pythonServiceUrl: PYTHON_SERVICE_URL,
+                fileSize: fileSize,
+                limit: VERCEL_LIMIT,
+                requiresDirectUpload: true
+            }, { status: 413 })
         }
 
         const formData = await request.formData()
         const file = formData.get('file') as File
 
         if (!file) {
+            console.log('[Preview API] No file provided')
             return NextResponse.json({ error: 'No file provided' }, { status: 400 })
         }
+
+        console.log('[Preview API] File received:', file.name, 'size:', file.size, 'bytes')
 
         // If Python service URL is configured, use it
         if (PYTHON_SERVICE_URL) {
             try {
-                // Convert file to base64 for Python service
+                console.log('[Preview API] Forwarding to Python service:', PYTHON_SERVICE_URL)
+
+                // Convert file to buffer for Python service
                 const buffer = Buffer.from(await file.arrayBuffer())
-                const base64Content = buffer.toString('base64')
 
                 // Forward to Python service
                 const pythonFormData = new FormData()
@@ -67,8 +137,11 @@ export async function POST(request: Request): Promise<NextResponse> {
                     body: pythonFormData,
                 })
 
+                console.log('[Preview API] Python service response status:', pythonResponse.status)
+
                 if (pythonResponse.ok) {
                     const pythonData = await pythonResponse.json()
+                    console.log('[Preview API] Python service success, columns:', pythonData.columns?.length || 0)
                     return NextResponse.json({
                         success: true,
                         sheets: pythonData.sheets || [],
@@ -82,16 +155,18 @@ export async function POST(request: Request): Promise<NextResponse> {
                 } else {
                     // Handle Python service error - try to get error message
                     const errorText = await pythonResponse.text()
-                    console.error('Python service error:', errorText)
+                    console.error('[Preview API] Python service error:', errorText)
                     // Return error as JSON so frontend can handle it
                     return NextResponse.json({
                         error: 'Python service error: ' + errorText.substring(0, 100)
                     }, { status: 502 })
                 }
             } catch (pythonError) {
-                console.error('Error calling Python service:', pythonError)
+                console.error('[Preview API] Error calling Python service:', pythonError)
                 // Fall through to Node.js implementation
             }
+        } else {
+            console.log('[Preview API] Python service URL not configured, using Node.js fallback')
         }
 
         // Node.js implementation (fallback)

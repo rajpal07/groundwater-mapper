@@ -452,27 +452,42 @@ def preview():
 def process():
     """Process Excel file and generate map."""
     try:
-        data = request.get_json()
+        # Support both FormData (from frontend) and JSON (from API)
+        if request.files and 'file' in request.files:
+            # FormData upload (from frontend direct upload)
+            file = request.files['file']
+            file_content = file.read()
+            parameter = request.form.get('parameter', '')
+            colormap = request.form.get('colormap', 'viridis')
+            show_contours = request.form.get('show_contours', 'true').lower() == 'true'
+            show_scatter = request.form.get('show_scatter', 'true').lower() == 'true'
+            use_llamaparse = request.form.get('use_llamaparse', 'true').lower() == 'true'
+        else:
+            # JSON upload (from API)
+            data = request.get_json()
+            
+            if 'file_content' not in data:
+                return jsonify({'error': 'No file content provided'}), 400
+            
+            if 'parameter' not in data:
+                return jsonify({'error': 'No parameter specified'}), 400
+            
+            # Decode base64 file content
+            try:
+                file_content = base64.b64decode(data['file_content'])
+            except Exception as e:
+                return jsonify({'error': f'Invalid file content: {e}'}), 400
+            
+            parameter = data['parameter']
+            colormap = data.get('colormap', 'viridis')
+            show_contours = data.get('show_contours', True)
+            show_scatter = data.get('show_scatter', True)
+            use_llamaparse = data.get('use_llamaparse', True)
         
-        if 'file_content' not in data:
-            return jsonify({'error': 'No file content provided'}), 400
-        
-        if 'parameter' not in data:
+        if not parameter:
             return jsonify({'error': 'No parameter specified'}), 400
         
-        # Decode base64 file content
-        try:
-            file_content = base64.b64decode(data['file_content'])
-        except Exception as e:
-            return jsonify({'error': f'Invalid file content: {e}'}), 400
-        
-        parameter = data['parameter']
-        colormap = data.get('colormap', 'viridis')
-        show_contours = data.get('show_contours', True)
-        show_scatter = data.get('show_scatter', True)
-        
         # Parse Excel
-        use_llamaparse = data.get('use_llamaparse', True)
         df, parse_method = parse_excel_file(file_content, use_llamaparse)
         
         if df is None:
