@@ -1,25 +1,45 @@
-import { initializeApp, getApps, cert, ServiceAccount } from 'firebase-admin/app'
+import { initializeApp, getApps, cert } from 'firebase-admin/app'
 import { getAuth as getAdminAuth } from 'firebase-admin/auth'
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore'
 
 // For server-side Firebase Admin, we need a service account
-// For development, we'll use application default credentials or a simple approach
-
 let adminDb: ReturnType<typeof getAdminFirestore> | undefined
+let adminAuth: ReturnType<typeof getAdminAuth> | undefined
 
 // Check if we're in a server environment
 const isServer = typeof window === 'undefined'
 
-if (isServer && process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
-    try {
-        // Initialize with project ID only - works with Firebase Admin SDK
-        initializeApp({
-            projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-        })
+console.log('Firebase Admin check - isServer:', isServer)
+console.log('Firebase Admin check - FIREBASE_SERVICE_ACCOUNT_KEY exists:', !!process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
 
-        adminDb = getAdminFirestore()
-    } catch (error) {
-        console.error('Firebase admin initialization error:', error)
+if (isServer) {
+    const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
+
+    if (serviceAccountKey) {
+        try {
+            // Parse the service account key from environment variable
+            const serviceAccount = JSON.parse(serviceAccountKey)
+            console.log('Firebase Admin - Parsed service account, project:', serviceAccount.project_id)
+
+            // Initialize Firebase Admin with service account credentials
+            if (!getApps().length) {
+                initializeApp({
+                    credential: cert(serviceAccount),
+                    projectId: serviceAccount.project_id,
+                })
+                console.log('Firebase Admin initialized successfully')
+            } else {
+                console.log('Firebase Admin already initialized')
+            }
+
+            adminDb = getAdminFirestore()
+            adminAuth = getAdminAuth()
+            console.log('Firebase Admin DB and Auth initialized')
+        } catch (error) {
+            console.error('Firebase admin initialization error:', error)
+        }
+    } else {
+        console.log('Firebase Admin - No service account key found in environment')
     }
 }
 
@@ -123,17 +143,29 @@ export async function createMap(userId: string, projectId: string, mapData: any)
         .collection('maps')
         .add({
             ...mapData,
+            status: 'pending',
             createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
         })
 
-    await adminDb
+    return { id: docRef.id, ...mapData }
+}
+
+export async function getMap(userId: string, projectId: string, mapId: string) {
+    if (!adminDb) return null
+
+    const doc = await adminDb
         .collection('users')
         .doc(userId)
         .collection('projects')
         .doc(projectId)
-        .update({ updatedAt: new Date().toISOString() })
+        .collection('maps')
+        .doc(mapId)
+        .get()
 
-    return { id: docRef.id, ...mapData }
+    if (!doc.exists) return null
+
+    return { id: doc.id, ...doc.data() }
 }
 
 export async function deleteMap(userId: string, projectId: string, mapId: string) {

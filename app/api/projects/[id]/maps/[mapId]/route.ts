@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyFirebaseToken, getProjectWithMaps, deleteProject } from '@/lib/firebase-admin'
+import { verifyFirebaseToken, getMap } from '@/lib/firebase-admin'
 
 export async function GET(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string; mapId: string }> }
 ) {
     try {
         const resolvedParams = await params
@@ -20,23 +20,22 @@ export async function GET(
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
         }
 
-        const project = await getProjectWithMaps(user.uid, resolvedParams.id)
+        const map = await getMap(user.uid, resolvedParams.id, resolvedParams.mapId)
 
-        if (!project) {
-            return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+        if (!map) {
+            return NextResponse.json({ error: 'Map not found' }, { status: 404 })
         }
 
-        const { maps, ...projectData } = project
-        return NextResponse.json({ project: projectData, maps: maps || [] })
+        return NextResponse.json({ map })
     } catch (error) {
-        console.error('Error fetching project:', error)
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+        console.error('Error fetching map:', error)
+        return NextResponse.json({ error: 'Failed to fetch map' }, { status: 500 })
     }
 }
 
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string; mapId: string }> }
 ) {
     try {
         const resolvedParams = await params
@@ -53,17 +52,13 @@ export async function DELETE(
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
         }
 
-        const project = await getProjectWithMaps(user.uid, resolvedParams.id)
-
-        if (!project) {
-            return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-        }
-
-        await deleteProject(user.uid, resolvedParams.id)
+        // Delete the map
+        const { deleteMap } = await import('@/lib/firebase-admin')
+        await deleteMap(user.uid, resolvedParams.id, resolvedParams.mapId)
 
         return NextResponse.json({ success: true })
     } catch (error) {
-        console.error('Error deleting project:', error)
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+        console.error('Error deleting map:', error)
+        return NextResponse.json({ error: 'Failed to delete map' }, { status: 500 })
     }
 }

@@ -43,7 +43,7 @@ export default function ProjectsPage() {
       }
 
       const data = await response.json()
-      router.push(`/dashboard/projects/${data.project.id}`)
+      router.push(`/dashboard/projects/${data.id}`)
     } catch (err) {
       console.error('Error creating project:', err)
       setError(err instanceof Error ? err.message : 'Failed to create project')
