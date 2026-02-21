@@ -83,24 +83,29 @@ try:
         secret_file = os.environ.get('GEE_SECRET_FILE', '/etc/secrets/gee-service-account.json')
         
         try:
+            from google.oauth2 import service_account
+            
+            # GEE specifically requires this scope
+            scopes = ['https://www.googleapis.com/auth/earthengine']
+            
             if gee_token:
                 # Use environment variable token
                 import json
-                import tempfile
                 try:
                     if isinstance(gee_token, str):
+                        # Handle escaped newlines in the environment variable
                         credentials = json.loads(gee_token)
                     else:
                         credentials = gee_token
                     
-                    # Write to temp file
-                    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-                        json.dump(credentials, f)
-                        temp_path = f.name
-                    
-                    # Extract project_id from credentials for ee.Initialize
                     project_id = credentials.get('project_id', 'geekahn')
-                    ee.Initialize(credentials=temp_path, project=project_id)
+                    
+                    # Use Google OAuth2 library to create credentials from dictionary
+                    # Don't specify custom scopes - let GEE use default scopes
+                    creds = service_account.Credentials.from_service_account_info(credentials)
+                    
+                    # Initialize with project parameter
+                    ee.Initialize(credentials=creds, project=project_id)
                     GEE_AVAILABLE = True
                     logger.info(f"Google Earth Engine initialized successfully from env var with project: {project_id}")
                 except Exception as e:
@@ -109,9 +114,15 @@ try:
                 # Use secret file - extract project_id from the file
                 import json
                 with open(secret_file, 'r') as f:
-                    creds = json.load(f)
-                    project_id = creds.get('project_id', 'geekahn')
-                ee.Initialize(credentials=secret_file, project=project_id)
+                    cred_dict = json.load(f)
+                    project_id = cred_dict.get('project_id', 'geekahn')
+                
+                # Use Google OAuth2 library to create credentials from dictionary (consistent with env var)
+                # Don't specify custom scopes - let GEE use default scopes
+                creds = service_account.Credentials.from_service_account_info(cred_dict)
+                
+                # Initialize with project parameter
+                ee.Initialize(credentials=creds, project=project_id)
                 GEE_AVAILABLE = True
                 logger.info(f"Google Earth Engine initialized successfully from secret file with project: {project_id}")
             else:
@@ -121,9 +132,15 @@ try:
                     # Extract project_id from the file
                     import json
                     with open(auto_detected_file, 'r') as f:
-                        creds = json.load(f)
-                        project_id = creds.get('project_id', 'geekahn')
-                    ee.Initialize(credentials=auto_detected_file, project=project_id)
+                        cred_dict = json.load(f)
+                        project_id = cred_dict.get('project_id', 'geekahn')
+                    
+                    # Use Google OAuth2 library to create credentials from dictionary (consistent with env var)
+                    # Don't specify custom scopes - let GEE use default scopes
+                    creds = service_account.Credentials.from_service_account_info(cred_dict)
+                    
+                    # Initialize with project parameter
+                    ee.Initialize(credentials=creds, project=project_id)
                     GEE_AVAILABLE = True
                     logger.info(f"Google Earth Engine initialized successfully from auto-detected secret file: {auto_detected_file} with project: {project_id}")
                 else:
