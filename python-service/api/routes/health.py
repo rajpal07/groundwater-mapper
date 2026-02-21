@@ -32,7 +32,9 @@ async def health_check() -> HealthResponse:
             "platform": platform.platform(),
             "gee_available": os.getenv("EARTHENGINE_TOKEN") is not None,
             "llama_cloud_key": bool(os.getenv("LLAMA_CLOUD_API_KEY"))
-        }
+        },
+        llamaparse=bool(os.getenv("LLAMA_CLOUD_API_KEY")),
+        gee=os.getenv("EARTHENGINE_TOKEN") is not None
     )
 
 

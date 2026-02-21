@@ -88,7 +88,7 @@ class ExcelParserService:
         try:
             parser = LlamaParse(
                 api_key=self.llama_cloud_api_key,
-                result_type="dataframe",
+                result_type="text",
                 verbose=False
             )
             
@@ -104,7 +104,7 @@ class ExcelParserService:
                     for line in lines:
                         if line.strip():
                             # Simple parsing - may need adjustment based on actual output
-                            parts = line.split('\t')
+                            parts = [p.strip() for p in line.split('\t') if p.strip()]
                             if len(parts) > 1:
                                 data.append(parts)
                 
