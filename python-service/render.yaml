@@ -1,19 +1,19 @@
-# Render.com deployment configuration
-# Save this as render.yaml in the python-service folder
+# Render.com deployment configuration for Groundwater Mapper API
 
 services:
   - type: web
     name: groundwater-mapper-api
+    branch: nextjs-firebase
+    root: python-service
     env: python
     region: oregon
     buildCommand: pip install -r requirements.txt
-    startCommand: python app.py
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
-      - key: LLAMA_CLOUD_API_KEY
-        # Add your LlamaCloud API key in Render dashboard
-        sync: false
-      - key: GOOGLE_EE_SERVICE_ACCOUNT
-        # Add your Google EE service account JSON in Render dashboard
-        sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: ALLOWED_ORIGINS
+        value: https://groundwater-mapper.vercel.app,https://groundwater-mapper-*.vercel.app
+    healthCheckPath: /health
