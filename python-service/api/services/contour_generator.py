@@ -85,8 +85,9 @@ try:
         try:
             from google.oauth2 import service_account
             
-            # GEE specifically requires this scope
-            scopes = ['https://www.googleapis.com/auth/earthengine']
+            # GEE specifically requires cloud-platform scope
+            EE_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
+            scopes = [EE_SCOPE]
             
             if gee_token:
                 # Use environment variable token
@@ -100,12 +101,14 @@ try:
                     
                     project_id = credentials.get('project_id', 'geekahn')
                     
-                    # Use Google OAuth2 library to create credentials from dictionary
-                    # Let GEE use default scopes automatically
-                    creds = service_account.Credentials.from_service_account_info(credentials)
+                    # Use Google OAuth2 library to create credentials with correct scope
+                    creds = service_account.Credentials.from_service_account_info(
+                        credentials,
+                        scopes=[EE_SCOPE]
+                    )
                     
-                    # Initialize GEE with default parameters
-                    ee.Initialize(creds)
+                    # Initialize GEE with credentials and scope
+                    ee.Initialize(credentials=creds)
                     GEE_AVAILABLE = True
                     logger.info("Google Earth Engine initialized successfully from env var")
                 except Exception as e:
@@ -117,12 +120,14 @@ try:
                     cred_dict = json.load(f)
                     project_id = cred_dict.get('project_id', 'geekahn')
                 
-                # Use Google OAuth2 library to create credentials from dictionary (consistent with env var)
-                # Let GEE use default scopes automatically
-                creds = service_account.Credentials.from_service_account_info(cred_dict)
+                # Use Google OAuth2 library to create credentials with correct scope
+                creds = service_account.Credentials.from_service_account_info(
+                    cred_dict,
+                    scopes=[EE_SCOPE]
+                )
                 
-                # Initialize GEE with default parameters
-                ee.Initialize(creds)
+                # Initialize GEE with credentials and scope
+                ee.Initialize(credentials=creds)
                 GEE_AVAILABLE = True
                 logger.info("Google Earth Engine initialized successfully from secret file")
             else:
@@ -135,12 +140,14 @@ try:
                         cred_dict = json.load(f)
                         project_id = cred_dict.get('project_id', 'geekahn')
                     
-                    # Use Google OAuth2 library to create credentials from dictionary (consistent with env var)
-                    # Don't specify custom scopes - let GEE use default scopes
-                    creds = service_account.Credentials.from_service_account_info(cred_dict)
+                    # Use Google OAuth2 library to create credentials with correct scope
+                    creds = service_account.Credentials.from_service_account_info(
+                        cred_dict,
+                        scopes=[EE_SCOPE]
+                    )
                     
-                    # Initialize GEE with default parameters (don't specify project - let GEE auto-detect)
-                    ee.Initialize(creds)
+                    # Initialize GEE with credentials and scope
+                    ee.Initialize(credentials=creds)
                     GEE_AVAILABLE = True
                     logger.info(f"Google Earth Engine initialized successfully from auto-detected secret file: {auto_detected_file}")
                 else:

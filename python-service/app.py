@@ -69,16 +69,18 @@ try:
     # Initialize Google Earth Engine - use google-auth library
     HAS_GEE = False
     
+    # Define the required scope for Earth Engine - use cloud-platform scope
+    EE_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
+    
     # Method 1: Try to read from secret file (recommended for Render)
     secret_file = os.environ.get('GEE_SECRET_FILE', '/etc/secrets/gee-service-account.json')
     if os.path.exists(secret_file):
         try:
-            # Don't specify custom scopes - let GEE use default scopes
             credentials = service_account.Credentials.from_service_account_file(
-                secret_file
+                secret_file,
+                scopes=[EE_SCOPE]
             )
-            # Use simple initialization without explicit credentials parameter
-            ee.Initialize(credentials)
+            ee.Initialize(credentials=credentials)
             HAS_GEE = True
             print("Google Earth Engine initialized from secret file!")
         except Exception as e:
@@ -94,12 +96,11 @@ try:
                         secret_path = os.path.join(secrets_dir, filename)
                         print(f"Trying secret file: {secret_path}")
                         try:
-                            # Don't specify custom scopes - let GEE use default scopes
                             credentials = service_account.Credentials.from_service_account_file(
-                                secret_path
+                                secret_path,
+                                scopes=[EE_SCOPE]
                             )
-                            # Use simple initialization without explicit credentials parameter
-                            ee.Initialize(credentials)
+                            ee.Initialize(credentials=credentials)
                             HAS_GEE = True
                             print(f"Google Earth Engine initialized from {filename}!")
                             break
@@ -113,12 +114,11 @@ try:
         gac = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
         if gac and os.path.exists(gac):
             try:
-                # Don't specify custom scopes - let GEE use default scopes
                 credentials = service_account.Credentials.from_service_account_file(
-                    gac
+                    gac,
+                    scopes=[EE_SCOPE]
                 )
-                # Use simple initialization without explicit credentials parameter
-                ee.Initialize(credentials)
+                ee.Initialize(credentials=credentials)
                 HAS_GEE = True
                 print("Google Earth Engine initialized from GOOGLE_APPLICATION_CREDENTIALS!")
             except Exception as e:
