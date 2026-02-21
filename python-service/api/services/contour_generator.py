@@ -21,30 +21,102 @@ from scipy.ndimage import gaussian_filter
 # Configure logging
 logger = logging.getLogger(__name__)
 
+
+def check_gee_available() -> bool:
+    """
+    Check if Google Earth Engine credentials are available.
+    
+    Checks for GEE in order:
+    1. EARTHENGINE_TOKEN environment variable (JSON string)
+    2. Secret file at /etc/secrets/gee-service-account.json (or path in GEE_SECRET_FILE env var)
+    3. Auto-detect ANY .json file in /etc/secrets/ (for Render secret files)
+    4. Standard GEE credentials file ~/.config/gcloud/application_default_credentials.json
+    """
+    # Check 1: Environment variable
+    if os.getenv("EARTHENGINE_TOKEN"):
+        return True
+    
+    # Check 2: Secret file (for Render deployment)
+    secret_file = os.environ.get('GEE_SECRET_FILE', '/etc/secrets/gee-service-account.json')
+    if os.path.exists(secret_file):
+        return True
+    
+    # Check 3: Auto-detect any JSON file in /etc/secrets/ (for Render secret files)
+    secrets_dir = '/etc/secrets'
+    if os.path.exists(secrets_dir):
+        try:
+            for filename in os.listdir(secrets_dir):
+                if filename.endswith('.json'):
+                    return True
+        except Exception as e:
+            print(f"Warning: Error scanning secrets directory: {e}")
+    
+    # Check 4: Standard GCP credentials file
+    gcp_creds = os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
+    if os.path.exists(gcp_creds):
+        return True
+    
+    return False
+
+
+# Helper function to find any JSON file in secrets directory
+def find_secret_json_file() -> Optional[str]:
+    """Find any JSON file in the secrets directory."""
+    secrets_dir = '/etc/secrets'
+    if os.path.exists(secrets_dir):
+        try:
+            for filename in os.listdir(secrets_dir):
+                if filename.endswith('.json'):
+                    return os.path.join(secrets_dir, filename)
+        except Exception as e:
+            logger.warning(f"Error scanning secrets directory: {e}")
+    return None
+
+
 # Google Earth Engine availability
 GEE_AVAILABLE = False
 try:
     import ee
-    # Try to initialize with service account
-    gee_token = os.getenv("EARTHENGINE_TOKEN")
-    if gee_token:
-        import json
-        import tempfile
-        # Parse the token if it's a JSON string
+    # Check if credentials are available
+    if check_gee_available():
+        gee_token = os.getenv("EARTHENGINE_TOKEN")
+        secret_file = os.environ.get('GEE_SECRET_FILE', '/etc/secrets/gee-service-account.json')
+        
         try:
-            if isinstance(gee_token, str):
-                credentials = json.loads(gee_token)
+            if gee_token:
+                # Use environment variable token
+                import json
+                import tempfile
+                try:
+                    if isinstance(gee_token, str):
+                        credentials = json.loads(gee_token)
+                    else:
+                        credentials = gee_token
+                    
+                    # Write to temp file
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                        json.dump(credentials, f)
+                        temp_path = f.name
+                    
+                    ee.Initialize(credentials=temp_path)
+                    GEE_AVAILABLE = True
+                    logger.info("Google Earth Engine initialized successfully from env var")
+                except Exception as e:
+                    logger.warning(f"Failed to initialize GEE from env var: {e}")
+            elif os.path.exists(secret_file):
+                # Use secret file
+                ee.Initialize(credentials=secret_file)
+                GEE_AVAILABLE = True
+                logger.info("Google Earth Engine initialized successfully from secret file")
             else:
-                credentials = gee_token
-            
-            # Write to temp file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-                json.dump(credentials, f)
-                temp_path = f.name
-            
-            ee.Initialize(credentials=temp_path)
-            GEE_AVAILABLE = True
-            logger.info("Google Earth Engine initialized successfully")
+                # Auto-detect any JSON file in /etc/secrets/ (for Render secret files)
+                auto_detected_file = find_secret_json_file()
+                if auto_detected_file:
+                    ee.Initialize(credentials=auto_detected_file)
+                    GEE_AVAILABLE = True
+                    logger.info(f"Google Earth Engine initialized successfully from auto-detected secret file: {auto_detected_file}")
+                else:
+                    logger.warning("No GEE credentials found")
         except Exception as e:
             logger.warning(f"Failed to initialize GEE: {e}")
 except ImportError:
