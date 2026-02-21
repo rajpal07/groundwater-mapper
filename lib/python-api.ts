@@ -172,11 +172,16 @@ export interface PreviewResponse {
 export async function previewExcel(
     file: File,
     token: string,
-    useLlamaParse: boolean = true
+    useLlamaParse: boolean = true,
+    sheetName?: string
 ): Promise<PreviewResponse> {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('use_llamaparse', String(useLlamaParse))
+
+    if (sheetName) {
+        formData.append('sheet_name', sheetName)
+    }
 
     return makeRequest<PreviewResponse>('/preview', {
         method: 'POST',
@@ -192,13 +197,18 @@ export async function previewExcelFromBuffer(
     buffer: Buffer,
     filename: string,
     token: string,
-    useLlamaParse: boolean = true
+    useLlamaParse: boolean = true,
+    sheetName?: string
 ): Promise<PreviewResponse> {
     const formData = new FormData()
     // Convert Buffer to Blob - use buffer as ArrayBuffer with type assertion
     const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer
     formData.append('file', new Blob([arrayBuffer]), filename)
     formData.append('use_llamaparse', String(useLlamaParse))
+
+    if (sheetName) {
+        formData.append('sheet_name', sheetName)
+    }
 
     return makeRequest<PreviewResponse>('/preview', {
         method: 'POST',

@@ -66,7 +66,7 @@ export default function NewMapPage() {
         }
     }
 
-    const fetchPreviewData = async (fileToUpload: File) => {
+    const fetchPreviewData = async (fileToUpload: File, sheetName?: string) => {
         setLoadingPreview(true)
         setPreviewData(null)
 
@@ -93,7 +93,9 @@ export default function NewMapPage() {
                 const formData = new FormData()
                 formData.append('file', fileToUpload)
                 formData.append('use_llamaparse', 'true')
-
+                if (sheetName) {
+                    formData.append('sheet_name', sheetName)
+                }
                 const response = await fetch(`${pythonUrl}/preview`, {
                     method: 'POST',
                     body: formData
@@ -134,6 +136,9 @@ export default function NewMapPage() {
             // For smaller files, use the normal API route
             const formData = new FormData()
             formData.append('file', fileToUpload)
+            if (sheetName) {
+                formData.append('sheet_name', sheetName)
+            }
 
             const response = await fetch('/api/preview', {
                 method: 'POST',
@@ -152,7 +157,9 @@ export default function NewMapPage() {
                     const pythonFormData = new FormData()
                     pythonFormData.append('file', fileToUpload)
                     pythonFormData.append('use_llamaparse', 'true')
-
+                    if (sheetName) {
+                        pythonFormData.append('sheet_name', sheetName)
+                    }
                     const pythonResponse = await fetch(`${data.pythonServiceUrl}/preview`, {
                         method: 'POST',
                         body: pythonFormData
@@ -214,8 +221,13 @@ export default function NewMapPage() {
         }
     }
 
-    const handleSheetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        setSelectedSheet(e.target.value)
+    const handleSheetChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newSheet = e.target.value
+        setSelectedSheet(newSheet)
+        setParameter('') // Reset parameter when sheet changes
+        if (file) {
+            await fetchPreviewData(file, newSheet)
+        }
     }
 
     const handleSubmit = async (e: React.FormEvent) => {

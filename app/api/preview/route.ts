@@ -87,6 +87,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         // Parse form data
         const formData = await request.formData()
         const file = formData.get('file') as File
+        const sheetName = (formData.get('sheet') || formData.get('sheetName') || formData.get('sheet_name')) as string | undefined
 
         if (!file) {
             return NextResponse.json({ error: 'No file provided' }, { status: 400 })
@@ -105,9 +106,9 @@ export async function POST(request: Request): Promise<NextResponse> {
         const pythonServiceUrl = getPythonServiceUrl()
         if (pythonServiceUrl) {
             try {
-                console.log('[Preview API] Forwarding to FastAPI backend:', pythonServiceUrl)
+                console.log('[Preview API] Forwarding to FastAPI backend:', pythonServiceUrl, sheetName ? `(Sheet: ${sheetName})` : '')
 
-                const result = await previewExcelFromBuffer(buffer, file.name, token, true)
+                const result = await previewExcelFromBuffer(buffer, file.name, token, true, sheetName)
 
                 console.log('[Preview API] FastAPI success, columns:', result.columns?.length || 0)
 
@@ -129,8 +130,8 @@ export async function POST(request: Request): Promise<NextResponse> {
         }
 
         // Node.js fallback implementation
-        console.log('[Preview API] Using Node.js fallback')
-        return await previewWithNodeJS(buffer)
+        console.log('[Preview API] Using Node.js fallback', sheetName ? `(Sheet: ${sheetName})` : '')
+        return await previewWithNodeJS(buffer, sheetName)
 
     } catch (error: any) {
         console.error('[Preview API] Error:', error)
@@ -143,13 +144,13 @@ export async function POST(request: Request): Promise<NextResponse> {
 /**
  * Node.js fallback for Excel preview using xlsx library
  */
-async function previewWithNodeJS(buffer: Buffer): Promise<NextResponse> {
+async function previewWithNodeJS(buffer: Buffer, sheetName?: string): Promise<NextResponse> {
     const workbook = XLSX.read(buffer, { type: 'buffer' })
     const sheetNames = workbook.SheetNames
 
-    // Get data from first sheet
-    const firstSheetName = sheetNames[0]
-    const worksheet = workbook.Sheets[firstSheetName]
+    // Get data from requested sheet or first sheet
+    const targetSheetName = sheetName && sheetNames.includes(sheetName) ? sheetName : sheetNames[0]
+    const worksheet = workbook.Sheets[targetSheetName]
     const data = XLSX.utils.sheet_to_json(worksheet)
 
     if (!data || data.length === 0) {
