@@ -101,13 +101,13 @@ try:
                     project_id = credentials.get('project_id', 'geekahn')
                     
                     # Use Google OAuth2 library to create credentials from dictionary
-                    # Don't specify custom scopes - let GEE use default scopes
+                    # Let GEE use default scopes automatically
                     creds = service_account.Credentials.from_service_account_info(credentials)
                     
-                    # Initialize with project parameter
-                    ee.Initialize(credentials=creds, project=project_id)
+                    # Initialize GEE with default parameters
+                    ee.Initialize(creds)
                     GEE_AVAILABLE = True
-                    logger.info(f"Google Earth Engine initialized successfully from env var with project: {project_id}")
+                    logger.info("Google Earth Engine initialized successfully from env var")
                 except Exception as e:
                     logger.warning(f"Failed to initialize GEE from env var: {e}")
             elif os.path.exists(secret_file):
@@ -118,13 +118,13 @@ try:
                     project_id = cred_dict.get('project_id', 'geekahn')
                 
                 # Use Google OAuth2 library to create credentials from dictionary (consistent with env var)
-                # Don't specify custom scopes - let GEE use default scopes
+                # Let GEE use default scopes automatically
                 creds = service_account.Credentials.from_service_account_info(cred_dict)
                 
-                # Initialize with project parameter
-                ee.Initialize(credentials=creds, project=project_id)
+                # Initialize GEE with default parameters
+                ee.Initialize(creds)
                 GEE_AVAILABLE = True
-                logger.info(f"Google Earth Engine initialized successfully from secret file with project: {project_id}")
+                logger.info("Google Earth Engine initialized successfully from secret file")
             else:
                 # Auto-detect any JSON file in /etc/secrets/ (for Render secret files)
                 auto_detected_file = find_secret_json_file()
@@ -139,10 +139,10 @@ try:
                     # Don't specify custom scopes - let GEE use default scopes
                     creds = service_account.Credentials.from_service_account_info(cred_dict)
                     
-                    # Initialize with project parameter
-                    ee.Initialize(credentials=creds, project=project_id)
+                    # Initialize GEE with default parameters (don't specify project - let GEE auto-detect)
+                    ee.Initialize(creds)
                     GEE_AVAILABLE = True
-                    logger.info(f"Google Earth Engine initialized successfully from auto-detected secret file: {auto_detected_file} with project: {project_id}")
+                    logger.info(f"Google Earth Engine initialized successfully from auto-detected secret file: {auto_detected_file}")
                 else:
                     logger.warning("No GEE credentials found")
         except Exception as e:
