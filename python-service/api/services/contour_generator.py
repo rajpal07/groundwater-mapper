@@ -98,23 +98,34 @@ try:
                         json.dump(credentials, f)
                         temp_path = f.name
                     
-                    ee.Initialize(credentials=temp_path)
+                    # Extract project_id from credentials for ee.Initialize
+                    project_id = credentials.get('project_id', 'geekahn')
+                    ee.Initialize(credentials=temp_path, project=project_id)
                     GEE_AVAILABLE = True
-                    logger.info("Google Earth Engine initialized successfully from env var")
+                    logger.info(f"Google Earth Engine initialized successfully from env var with project: {project_id}")
                 except Exception as e:
                     logger.warning(f"Failed to initialize GEE from env var: {e}")
             elif os.path.exists(secret_file):
-                # Use secret file
-                ee.Initialize(credentials=secret_file)
+                # Use secret file - extract project_id from the file
+                import json
+                with open(secret_file, 'r') as f:
+                    creds = json.load(f)
+                    project_id = creds.get('project_id', 'geekahn')
+                ee.Initialize(credentials=secret_file, project=project_id)
                 GEE_AVAILABLE = True
-                logger.info("Google Earth Engine initialized successfully from secret file")
+                logger.info(f"Google Earth Engine initialized successfully from secret file with project: {project_id}")
             else:
                 # Auto-detect any JSON file in /etc/secrets/ (for Render secret files)
                 auto_detected_file = find_secret_json_file()
                 if auto_detected_file:
-                    ee.Initialize(credentials=auto_detected_file)
+                    # Extract project_id from the file
+                    import json
+                    with open(auto_detected_file, 'r') as f:
+                        creds = json.load(f)
+                        project_id = creds.get('project_id', 'geekahn')
+                    ee.Initialize(credentials=auto_detected_file, project=project_id)
                     GEE_AVAILABLE = True
-                    logger.info(f"Google Earth Engine initialized successfully from auto-detected secret file: {auto_detected_file}")
+                    logger.info(f"Google Earth Engine initialized successfully from auto-detected secret file: {auto_detected_file} with project: {project_id}")
                 else:
                     logger.warning("No GEE credentials found")
         except Exception as e:
