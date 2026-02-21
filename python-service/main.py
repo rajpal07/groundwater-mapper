@@ -108,10 +108,30 @@ Supported interpolation methods:
 )
 
 # Configure CORS
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,https://groundwater-mapper.vercel.app").split(",")
+import re
+allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,https://groundwater-mapper.vercel.app").split(",")
+allowed_origins = []
+allowed_origin_regexes = []
+
+for origin in allowed_origins_raw:
+    origin = origin.strip()
+    if not origin:
+        continue
+    if "*" in origin:
+        # Convert wildcard to a regex block, e.g. https://*-app.vercel.app -> ^https://.*\-app\.vercel\.app$
+        regex_pattern = "^" + re.escape(origin).replace("\\*", ".*") + "$"
+        allowed_origin_regexes.append(regex_pattern)
+    else:
+        allowed_origins.append(origin)
+
+allow_origin_regex = None
+if allowed_origin_regexes:
+    allow_origin_regex = "|".join(allowed_origin_regexes)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
