@@ -41,7 +41,9 @@ google-auth==2.27.0
 requests==2.31.0
 
 # LlamaCloud for AI-powered Excel parsing
-llama-parse==0.1.3
+# Use unpinned versions to get latest llama-index with working SimpleDirectoryReader
+llama-parse
+llama-index
 
 # Google Earth Engine for satellite imagery
 earthengine-api>=0.1.374
