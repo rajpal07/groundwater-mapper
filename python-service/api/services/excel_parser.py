@@ -76,55 +76,15 @@ class ExcelParserService:
         file_content: bytes,
         filename: str
     ) -> Optional[pd.DataFrame]:
-        """Parse Excel file using LlamaParse."""
-        if not self.llamaparse_available:
-            return None
+        """Parse Excel file using LlamaParse.
         
-        # Save to temp file for LlamaParse
-        with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{filename.split(".")[-1]}') as tmp:
-            tmp.write(file_content)
-            tmp_path = tmp.name
-        
-        try:
-            parser = LlamaParse(
-                api_key=self.llama_cloud_api_key,
-                result_type="text",
-                verbose=False
-            )
-            
-            # Parse the file
-            documents = parser.load_data(tmp_path)
-            
-            if documents:
-                # Convert to DataFrame
-                data = []
-                for doc in documents:
-                    # Parse the text content into structured data
-                    lines = doc.text.split('\n')
-                    for line in lines:
-                        if line.strip():
-                            # Simple parsing - may need adjustment based on actual output
-                            parts = [p.strip() for p in line.split('\t') if p.strip()]
-                            if len(parts) > 1:
-                                data.append(parts)
-                
-                if data:
-                    # Use first row as headers if it looks like headers
-                    if all(isinstance(v, str) for v in data[0]):
-                        df = pd.DataFrame(data[1:], columns=data[0])
-                    else:
-                        df = pd.DataFrame(data)
-                    
-                    return df
-            
-            return None
-            
-        finally:
-            # Clean up temp file
-            try:
-                os.unlink(tmp_path)
-            except:
-                pass
+        Note: LlamaParse is disabled by default due to async compatibility issues.
+        Use pandas fallback which works reliably.
+        """
+        # LlamaParse has async compatibility issues with FastAPI
+        # The sync load_data method may not exist in newer versions
+        # Fallback to pandas is reliable and fast
+        return None
     
     def _parse_with_pandas(
         self,

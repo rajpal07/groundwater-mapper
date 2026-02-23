@@ -153,14 +153,14 @@ export default function NewMapPage() {
                 console.log('[Frontend] Python service response:', data)
 
                 setPreviewData({
-                    sheets: data.sheets || [],
+                    sheets: data.sheets || data.sheet_names || [],
                     columns: data.columns || [],
                     availableParameters: data.numeric_columns || [],
                     rowCount: data.row_count || 0,
-                    sampleData: data.preview || []
+                    sampleData: data.preview_data || []
                 })
 
-                const sheets = data.sheets || []
+                const sheets = data.sheets || data.sheet_names || []
                 if (sheets.length > 0) {
                     setSelectedSheet(sheets[0])
                 }
@@ -219,14 +219,14 @@ export default function NewMapPage() {
 
                     const pythonData = result.data
                     setPreviewData({
-                        sheets: pythonData.sheets || [],
+                        sheets: pythonData.sheets || pythonData.sheet_names || [],
                         columns: pythonData.columns || [],
                         availableParameters: pythonData.numeric_columns || [],
                         rowCount: pythonData.row_count || 0,
-                        sampleData: pythonData.preview || []
+                        sampleData: pythonData.preview_data || []
                     })
 
-                    const sheets = pythonData.sheets || []
+                    const sheets = pythonData.sheets || pythonData.sheet_names || []
                     if (sheets.length > 0) {
                         setSelectedSheet(sheets[0])
                     }
