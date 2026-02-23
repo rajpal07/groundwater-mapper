@@ -658,39 +658,41 @@ export default function NewMapPage() {
                     </div>
                 )}
 
-                <div className="mb-6">
-                    <label htmlFor="colormap" className="block font-medium text-gray-700 mb-2">Color Scheme</label>
-                    <select
-                        id="colormap"
-                        value={colormap}
-                        onChange={(e) => setColormap(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary transition-colors"
-                    >
-                        <option value="viridis">Viridis (Purple → Yellow)</option>
-                        <option value="plasma">Plasma (Purple → Orange → Yellow)</option>
-                        <option value="RdYlBu_r">Red-Yellow-Blue (Reversed)</option>
-                        <option value="RdYlBu">Red-Yellow-Blue</option>
-                        <option value="blues">Blues</option>
-                        <option value="greens">Greens</option>
-                        <option value="reds">Reds</option>
-                        <option value="YlOrRd">Yellow-Orange-Red</option>
-                        <option value="YlGn">Yellow-Green</option>
-                        <option value="YlGnBu">Yellow-Green-Blue</option>
-                        <option value="BuPu">Blue-Purple</option>
-                        <option value="GnBu">Green-Blue</option>
-                        <option value="OrRd">Orange-Red</option>
-                        <option value="PuBu">Purple-Blue</option>
-                        <option value="PuRd">Purple-Red</option>
-                        <option value="BrBG">Brown-Blue-Green</option>
-                        <option value="PRGn">Purple-Green</option>
-                        <option value="PiYG">Pink-Yellow-Green</option>
-                        <option value="inferno">Inferno</option>
-                        <option value="magma">Magma</option>
-                        <option value="cividis">Cividis</option>
-                        <option value="Spectral_r">Spectral (Reversed)</option>
-                        <option value="coolwarm">Coolwarm</option>
-                    </select>
-                </div>
+                {parameter && (
+                    <div className="mb-6">
+                        <label htmlFor="colormap" className="block font-medium text-gray-700 mb-2">Color Scheme</label>
+                        <select
+                            id="colormap"
+                            value={colormap}
+                            onChange={(e) => setColormap(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary transition-colors"
+                        >
+                            <option value="viridis">Viridis (Purple → Yellow)</option>
+                            <option value="plasma">Plasma (Purple → Orange → Yellow)</option>
+                            <option value="RdYlBu_r">Red-Yellow-Blue (Reversed)</option>
+                            <option value="RdYlBu">Red-Yellow-Blue</option>
+                            <option value="blues">Blues</option>
+                            <option value="greens">Greens</option>
+                            <option value="reds">Reds</option>
+                            <option value="YlOrRd">Yellow-Orange-Red</option>
+                            <option value="YlGn">Yellow-Green</option>
+                            <option value="YlGnBu">Yellow-Green-Blue</option>
+                            <option value="BuPu">Blue-Purple</option>
+                            <option value="GnBu">Green-Blue</option>
+                            <option value="OrRd">Orange-Red</option>
+                            <option value="PuBu">Purple-Blue</option>
+                            <option value="PuRd">Purple-Red</option>
+                            <option value="BrBG">Brown-Blue-Green</option>
+                            <option value="PRGn">Purple-Green</option>
+                            <option value="PiYG">Pink-Yellow-Green</option>
+                            <option value="inferno">Inferno</option>
+                            <option value="magma">Magma</option>
+                            <option value="cividis">Cividis</option>
+                            <option value="Spectral_r">Spectral (Reversed)</option>
+                            <option value="coolwarm">Coolwarm</option>
+                        </select>
+                    </div>
+                )}
 
                 <div className="bg-blue-50 rounded-lg p-4 mb-6">
                     <h3 className="font-medium text-blue-800 mb-2">Expected Data Format</h3>
