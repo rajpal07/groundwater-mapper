@@ -58,7 +58,7 @@ class ExcelParserService:
         # Try LlamaParse first if requested and available
         if use_llamaparse and self.llamaparse_available and ext in ['xlsx', 'xls']:
             try:
-                df = self._parse_with_llamaparse(file_content, filename)
+                df = self._parse_with_llamaparse(file_content, filename, sheet_name)
                 if df is not None and not df.empty:
                     logger.info(f"Successfully parsed with LlamaParse: {len(df)} rows")
                     return df
@@ -74,17 +74,75 @@ class ExcelParserService:
     def _parse_with_llamaparse(
         self,
         file_content: bytes,
-        filename: str
+        filename: str,
+        sheet_name: Optional[str] = None
     ) -> Optional[pd.DataFrame]:
-        """Parse Excel file using LlamaParse.
+        """Parse Excel file using LlamaParse."""
+        if not self.llamaparse_available:
+            return None
         
-        Note: LlamaParse is disabled by default due to async compatibility issues.
-        Use pandas fallback which works reliably.
-        """
-        # LlamaParse has async compatibility issues with FastAPI
-        # The sync load_data method may not exist in newer versions
-        # Fallback to pandas is reliable and fast
-        return None
+        # Save to temp file for LlamaParse
+        ext = filename.lower().split('.')[-1] if '.' in filename else 'xlsx'
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{ext}') as tmp:
+            tmp.write(file_content)
+            tmp_path = tmp.name
+        
+        try:
+            parser = LlamaParse(
+                api_key=self.llama_cloud_api_key,
+                result_type="text",
+                verbose=False
+            )
+            
+            # Parse the file using async method with proper event loop handling
+            import asyncio
+            import concurrent.futures
+            
+            async def load_data_async():
+                return await parser.aload_data(tmp_path)
+            
+            # Run in a separate thread to avoid event loop issues
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, load_data_async())
+                documents = future.result()
+            
+            if documents:
+                # Convert to DataFrame
+                data = []
+                for doc in documents:
+                    # Parse the text content into structured data
+                    lines = doc.text.split('\n')
+                    for line in lines:
+                        if line.strip():
+                            # Simple parsing - may need adjustment based on actual output
+                            parts = [p.strip() for p in line.split('\t') if p.strip()]
+                            if len(parts) > 1:
+                                data.append(parts)
+                
+                if data:
+                    # Use first row as headers if it looks like headers
+                    if all(isinstance(v, str) for v in data[0]):
+                        df = pd.DataFrame(data[1:], columns=data[0])
+                    else:
+                        df = pd.DataFrame(data)
+                    
+                    # If sheet_name specified, validate it exists
+                    if sheet_name:
+                        logger.info(f"LlamaParse parsed data with {len(df)} rows")
+                    
+                    return df
+            
+            return None
+            
+        except Exception as e:
+            logger.warning(f"LlamaParse parsing failed: {e}")
+            return None
+        finally:
+            # Clean up temp file
+            try:
+                os.unlink(tmp_path)
+            except:
+                pass
     
     def _parse_with_pandas(
         self,
