@@ -88,23 +88,24 @@ class ExcelParserService:
             tmp_path = tmp.name
         
         try:
-            # Use SimpleDirectoryReader with LlamaParse - same as Streamlit
-            # Note: In llama-index 0.9.x, SimpleDirectoryReader moved to llama_index.core.readers
-            try:
-                from llama_index.core.readers import SimpleDirectoryReader
-            except ImportError:
-                from llama_index.core import SimpleDirectoryReader
-            
+            # Use LlamaParse directly - more compatible across versions
             parser = LlamaParse(
                 api_key=self.llama_cloud_api_key,
                 result_type="markdown",  # Use markdown for better table structure
                 verbose=False
             )
             
-            # Use file_extractor like Streamlit does
-            file_extractor = {".xlsx": parser}
-            reader = SimpleDirectoryReader(input_files=[tmp_path], file_extractor=file_extractor)
-            documents = reader.load_data()
+            # Use aload_data directly - simpler and more compatible
+            import asyncio
+            import concurrent.futures
+            
+            async def load_data_async():
+                return await parser.aload_data(tmp_path)
+            
+            # Run in a separate thread to avoid event loop issues
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, load_data_async())
+                documents = future.result()
             
             if not documents:
                 return None
