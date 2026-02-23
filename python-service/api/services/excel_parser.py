@@ -77,7 +77,7 @@ class ExcelParserService:
         filename: str,
         sheet_name: Optional[str] = None
     ) -> Optional[pd.DataFrame]:
-        """Parse Excel file using LlamaParse."""
+        """Parse Excel file using LlamaParse - matching Streamlit's approach."""
         if not self.llamaparse_available:
             return None
         
@@ -88,49 +88,32 @@ class ExcelParserService:
             tmp_path = tmp.name
         
         try:
+            # Use SimpleDirectoryReader with LlamaParse - same as Streamlit
+            from llama_index.core import SimpleDirectoryReader
+            
             parser = LlamaParse(
                 api_key=self.llama_cloud_api_key,
-                result_type="text",
+                result_type="markdown",  # Use markdown for better table structure
                 verbose=False
             )
             
-            # Parse the file using async method with proper event loop handling
-            import asyncio
-            import concurrent.futures
+            # Use file_extractor like Streamlit does
+            file_extractor = {".xlsx": parser}
+            reader = SimpleDirectoryReader(input_files=[tmp_path], file_extractor=file_extractor)
+            documents = reader.load_data()
             
-            async def load_data_async():
-                return await parser.aload_data(tmp_path)
+            if not documents:
+                return None
             
-            # Run in a separate thread to avoid event loop issues
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, load_data_async())
-                documents = future.result()
+            # Get the markdown text
+            markdown_text = "\n\n".join([doc.text for doc in documents])
             
-            if documents:
-                # Convert to DataFrame
-                data = []
-                for doc in documents:
-                    # Parse the text content into structured data
-                    lines = doc.text.split('\n')
-                    for line in lines:
-                        if line.strip():
-                            # Simple parsing - may need adjustment based on actual output
-                            parts = [p.strip() for p in line.split('\t') if p.strip()]
-                            if len(parts) > 1:
-                                data.append(parts)
-                
-                if data:
-                    # Use first row as headers if it looks like headers
-                    if all(isinstance(v, str) for v in data[0]):
-                        df = pd.DataFrame(data[1:], columns=data[0])
-                    else:
-                        df = pd.DataFrame(data)
-                    
-                    # If sheet_name specified, validate it exists
-                    if sheet_name:
-                        logger.info(f"LlamaParse parsed data with {len(df)} rows")
-                    
-                    return df
+            # Parse markdown tables - similar to Streamlit's smart_extract_sheet
+            df = self._parse_markdown_tables(markdown_text)
+            
+            if df is not None and not df.empty:
+                logger.info(f"LlamaParse successfully parsed: {len(df)} rows, {len(df.columns)} columns")
+                return df
             
             return None
             
@@ -143,6 +126,107 @@ class ExcelParserService:
                 os.unlink(tmp_path)
             except:
                 pass
+    
+    def _parse_markdown_tables(self, markdown_text: str) -> Optional[pd.DataFrame]:
+        """
+        Parse markdown tables from LlamaParse output - matching Streamlit's approach.
+        """
+        import re
+        
+        lines = markdown_text.split('\n')
+        tables = []
+        
+        current_idx = 0
+        while current_idx < len(lines):
+            # Find next table header (look for | in line)
+            header_row_index = -1
+            for i in range(current_idx, len(lines)):
+                if "|" in lines[i] and not lines[i].startswith('#'):
+                    header_row_index = i
+                    break
+            
+            if header_row_index == -1:
+                break  # No more tables
+            
+            # Parse header row
+            header_line = lines[header_row_index].strip()
+            if header_line.startswith('|'): header_line = header_line[1:]
+            if header_line.endswith('|'): header_line = header_line[:-1]
+            headers = [c.strip() for c in header_line.split('|')]
+            
+            # Check for second header row (multi-row headers)
+            next_row_idx = header_row_index + 1
+            headers_row2 = None
+            if next_row_idx < len(lines):
+                next_line = lines[next_row_idx].strip()
+                if next_line.startswith('|') and '---' not in next_line:
+                    if next_line.startswith('|'): next_line = next_line[1:]
+                    if next_line.endswith('|'): next_line = next_line[:-1]
+                    potential_headers = [c.strip() for c in next_line.split('|')]
+                    has_column_names = any(h and h not in ['Units', 'LOR', 'Guideline', ''] and not h.replace('.','').replace('-','').isdigit() for h in potential_headers)
+                    if has_column_names:
+                        headers_row2 = potential_headers
+            
+            # Merge headers if multi-row
+            if headers_row2:
+                merged_headers = []
+                for i in range(max(len(headers), len(headers_row2))):
+                    h1 = headers[i] if i < len(headers) else ''
+                    h2 = headers_row2[i] if i < len(headers_row2) else ''
+                    merged_headers.append(h2 if h2 else h1)
+                headers = merged_headers
+            
+            # Remove empty headers
+            headers = [h for h in headers if h]
+            
+            if not headers:
+                current_idx = header_row_index + 1
+                continue
+            
+            # Parse data rows
+            data = []
+            data_start_row = header_row_index + (2 if headers_row2 else 1)
+            
+            for i in range(data_start_row, len(lines)):
+                line = lines[i].strip()
+                
+                # Stop at new section or non-table content
+                if line.startswith('#'): break
+                if not line.startswith('|') and len(line) > 5: break
+                
+                if not line.startswith('|'): continue
+                if '---' in line: continue
+                
+                clean_line = line
+                if clean_line.startswith('|'): clean_line = clean_line[1:]
+                if clean_line.endswith('|'): clean_line = clean_line[:-1]
+                cells = [c.strip() for c in clean_line.split('|')]
+                
+                if len(cells) > len(headers): cells = cells[:len(headers)]
+                elif len(cells) < len(headers): cells += [''] * (len(headers) - len(cells))
+                
+                row_dict = {}
+                has_data = False
+                for h, c in zip(headers, cells):
+                    row_dict[h] = c
+                    if c: has_data = True
+                
+                if has_data and row_dict.get(headers[0]):
+                    val = str(row_dict[headers[0]])
+                    if val in ['Units', 'LOR', 'Guideline', 'None', '', 'nan']: continue
+                    data.append(row_dict)
+            
+            if data:
+                df_table = pd.DataFrame(data)
+                tables.append(df_table)
+            
+            current_idx = data_start_row + len(data)
+        
+        if not tables:
+            return None
+        
+        # Return the first/largest table
+        return tables[0] if tables else None
     
     def _parse_with_pandas(
         self,
