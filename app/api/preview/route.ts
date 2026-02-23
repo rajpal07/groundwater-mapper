@@ -121,7 +121,8 @@ export async function POST(request: Request): Promise<NextResponse> {
                     sampleData: result.preview,
                     coordinateSystem: result.coordinate_system,
                     source: 'fastapi',
-                    parseMethod: result.parse_method
+                    parseMethod: result.parse_method,
+                    needsSheetSelection: result.needs_sheet_selection || false
                 })
             } catch (pythonError: any) {
                 console.error('[Preview API] FastAPI error:', pythonError.message)
@@ -205,6 +206,7 @@ async function previewWithNodeJS(buffer: Buffer, sheetName?: string): Promise<Ne
         lonColumns,
         rowCount: data.length,
         sampleData,
-        source: 'nodejs'
+        source: 'nodejs',
+        needsSheetSelection: false
     })
 }

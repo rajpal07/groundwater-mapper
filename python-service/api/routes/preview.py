@@ -38,6 +38,10 @@ async def preview_excel(
     - Numeric column statistics
     
     This endpoint is used to help users select the correct columns for map generation.
+    
+    OPTIMIZATION: If no sheet_name is provided for a multi-sheet Excel file,
+    only sheet names are returned (without processing full data) for faster response.
+    Full data is returned only when sheet_name is explicitly provided.
     """
     # Convert use_llamaparse string to boolean
     use_llamaparse_bool = use_llamaparse.lower() in ('true', '1', 'yes') if use_llamaparse else False
@@ -47,7 +51,10 @@ async def preview_excel(
         raise HTTPException(status_code=400, detail="No filename provided")
     
     filename = file.filename.lower()
-    if not (filename.endswith('.xlsx') or filename.endswith('.xls') or filename.endswith('.csv')):
+    is_csv = filename.endswith('.csv')
+    is_excel = filename.endswith('.xlsx') or filename.endswith('.xls')
+    
+    if not (is_excel or is_csv):
         raise HTTPException(
             status_code=400, 
             detail="Invalid file type. Only .xlsx, .xls, and .csv files are supported."
@@ -62,9 +69,33 @@ async def preview_excel(
         logger.error(f"Error reading file: {e}")
         raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
     
-    # Parse Excel file - Use pandas for initial detection, LlamaParse only when sheet is selected
-    # If sheet_name is provided, use LlamaParse for that specific sheet
-    # If no sheet_name (first upload), use pandas only to detect sheets
+    # Get sheet names first (fast operation)
+    sheet_names = []
+    if is_excel:
+        sheet_names = excel_parser.get_sheet_names(content)
+    
+    # OPTIMIZATION: For multi-sheet Excel files without sheet_name, return only sheet names
+    # This is a lightweight response that doesn't parse the actual data
+    is_multi_sheet = is_excel and len(sheet_names) > 1
+    needs_full_data = sheet_name is not None or is_csv or not is_multi_sheet
+    
+    if is_multi_sheet and not needs_full_data:
+        # Return only sheet names without processing data (fast response for initial upload)
+        logger.info(f"Multi-sheet Excel detected ({len(sheet_names)} sheets), returning sheet list only")
+        return PreviewResponse(
+            filename=file.filename,
+            sheet_names=sheet_names,
+            current_sheet=None,
+            row_count=0,
+            column_count=0,
+            columns=[],
+            coordinate_system=None,
+            numeric_columns=[],
+            preview_data=[],
+            needs_sheet_selection=True  # Signal frontend that user needs to select a sheet
+        )
+    
+    # For CSV, single-sheet Excel, or when sheet_name is provided, process full data
     use_llamaparse_for_parsing = sheet_name is not None and use_llamaparse_bool
     
     try:
@@ -133,7 +164,8 @@ async def preview_excel(
         columns=columns,
         coordinate_system=coord_system,
         numeric_columns=numeric_columns,
-        preview_data=preview_data
+        preview_data=preview_data,
+        needs_sheet_selection=False
     )
 
 

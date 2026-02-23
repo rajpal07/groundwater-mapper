@@ -93,6 +93,7 @@ class PreviewResponse(BaseModel):
     coordinate_system: Optional[CoordinateSystemInfo] = None
     numeric_columns: List[str] = []
     preview_data: List[Dict[str, Any]] = []
+    needs_sheet_selection: bool = False  # Flag to indicate user needs to select a sheet first
 
 
 # ============================================

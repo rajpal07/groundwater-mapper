@@ -14,6 +14,7 @@ interface PreviewData {
     availableParameters: string[]
     rowCount: number
     sampleData: any[]
+    needsSheetSelection?: boolean
 }
 
 const VERCEL_SAFE_LIMIT = 4 * 1024 * 1024
@@ -90,12 +91,16 @@ export default function NewMapPage() {
     const [loadingPreview, setLoadingPreview] = useState(false)
     const [uploadProgressMsg, setUploadProgressMsg] = useState('')
     const [uploadProgress, setUploadProgress] = useState(0)
+    const [needsSheetSelection, setNeedsSheetSelection] = useState(false)
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const selectedFile = e.target.files[0]
             setFile(selectedFile)
             setError('')
+            setNeedsSheetSelection(false)  // Reset sheet selection state
+            setPreviewData(null)  // Clear previous preview data
+            setParameter('')  // Clear parameter
             if (!name) {
                 const fileName = selectedFile.name.replace(/\.[^/.]+$/, '')
                 setName(fileName)
@@ -151,6 +156,28 @@ export default function NewMapPage() {
 
                 const data = result.data
                 console.log('[Frontend] Python service response:', data)
+
+                // Check if user needs to select a sheet first
+                const needsSelection = data.needsSheetSelection === true
+                setNeedsSheetSelection(needsSelection)
+
+                if (needsSelection) {
+                    // Only show sheet selector, don't process full data yet
+                    setPreviewData({
+                        sheets: data.sheets || data.sheet_names || [],
+                        columns: [],
+                        availableParameters: [],
+                        rowCount: 0,
+                        sampleData: [],
+                        needsSheetSelection: true
+                    })
+                    // Set first sheet as selected but don't process data
+                    const sheets = data.sheets || data.sheet_names || []
+                    if (sheets.length > 0) {
+                        setSelectedSheet(sheets[0])
+                    }
+                    return
+                }
 
                 setPreviewData({
                     sheets: data.sheets || data.sheet_names || [],
@@ -218,6 +245,29 @@ export default function NewMapPage() {
                     }
 
                     const pythonData = result.data
+
+                    // Check if user needs to select a sheet first
+                    const pythonNeedsSelection = pythonData.needsSheetSelection === true
+                    setNeedsSheetSelection(pythonNeedsSelection)
+
+                    if (pythonNeedsSelection) {
+                        // Only show sheet selector, don't process full data yet
+                        setPreviewData({
+                            sheets: pythonData.sheets || pythonData.sheet_names || [],
+                            columns: [],
+                            availableParameters: [],
+                            rowCount: 0,
+                            sampleData: [],
+                            needsSheetSelection: true
+                        })
+                        // Set first sheet as selected but don't process data
+                        const sheets = pythonData.sheets || pythonData.sheet_names || []
+                        if (sheets.length > 0) {
+                            setSelectedSheet(sheets[0])
+                        }
+                        return
+                    }
+
                     setPreviewData({
                         sheets: pythonData.sheets || pythonData.sheet_names || [],
                         columns: pythonData.columns || [],
@@ -245,6 +295,29 @@ export default function NewMapPage() {
             }
 
             const data = await response.json()
+
+            // Check if user needs to select a sheet first
+            const needsSelection = data.needsSheetSelection === true
+            setNeedsSheetSelection(needsSelection)
+
+            if (needsSelection) {
+                // Only show sheet selector, don't process full data yet
+                setPreviewData({
+                    sheets: data.sheets || data.sheetNames || [],
+                    columns: [],
+                    availableParameters: [],
+                    rowCount: 0,
+                    sampleData: [],
+                    needsSheetSelection: true
+                })
+                // Set first sheet as selected but don't process data
+                const sheets = data.sheets || data.sheetNames || []
+                if (sheets.length > 0) {
+                    setSelectedSheet(sheets[0])
+                }
+                return
+            }
+
             setPreviewData(data)
 
             const sheets = data.sheets || data.sheetNames || []
@@ -272,6 +345,7 @@ export default function NewMapPage() {
         const newSheet = e.target.value
         setSelectedSheet(newSheet)
         setParameter('')
+        setNeedsSheetSelection(false)  // User has selected a sheet, now fetch full data
         if (file) {
             await fetchPreviewData(file, newSheet)
         }
@@ -419,7 +493,8 @@ export default function NewMapPage() {
 
     const sheets = previewData?.sheets || previewData?.sheetNames || previewData?.sheet_names || previewData?.SheetNames || []
     const isExcelFile = file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))
-    const showSheetDropdown = isExcelFile && sheets.length > 1
+    // Show sheet dropdown if multi-sheet Excel OR if needsSheetSelection flag is set
+    const showSheetDropdown = isExcelFile && (sheets.length > 1 || needsSheetSelection)
 
     return (
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -516,7 +591,9 @@ export default function NewMapPage() {
 
                 {showSheetDropdown && (
                     <div className="mb-6">
-                        <label htmlFor="sheet" className="block font-medium text-gray-700 mb-2">Select Sheet *</label>
+                        <label htmlFor="sheet" className="block font-medium text-gray-700 mb-2">
+                            Select Sheet {needsSheetSelection && <span className="text-red-500">*</span>}
+                        </label>
                         <select
                             id="sheet"
                             value={selectedSheet}
@@ -524,17 +601,22 @@ export default function NewMapPage() {
                             required
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary transition-colors"
                         >
+                            {needsSheetSelection && <option value="">-- Select a Sheet --</option>}
                             {sheets.map((sheet: string) => (
                                 <option key={sheet} value={sheet}>
                                     {sheet}
                                 </option>
                             ))}
                         </select>
-                        <p className="text-sm text-gray-500 mt-1">Select the sheet containing your data</p>
+                        {needsSheetSelection ? (
+                            <p className="text-sm text-amber-600 mt-1">Please select a sheet to continue</p>
+                        ) : (
+                            <p className="text-sm text-gray-500 mt-1">Select the sheet containing your data</p>
+                        )}
                     </div>
                 )}
 
-                {previewData && (previewData.availableParameters?.length > 0 || previewData.columns?.length > 0) && (
+                {previewData && !needsSheetSelection && (previewData.availableParameters?.length > 0 || previewData.columns?.length > 0) && (
                     <div className="mb-6">
                         <label htmlFor="parameter" className="block font-medium text-gray-700 mb-2">
                             Parameter to Map *
@@ -560,7 +642,7 @@ export default function NewMapPage() {
                     </div>
                 )}
 
-                {!previewData && file && !loadingPreview && (
+                {!previewData && file && !loadingPreview && !needsSheetSelection && (
                     <div className="mb-6">
                         <label htmlFor="parameter" className="block font-medium text-gray-700 mb-2">Parameter *</label>
                         <input
