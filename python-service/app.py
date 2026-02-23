@@ -373,8 +373,11 @@ def parse_excel_file(file_content, use_llamaparse=True):
     if use_llamaparse and HAS_LLAMA_PARSE:
         try:
             from llama_parse import LlamaParse
-            parsing_instruction = "Extract all data from this Excel file. Return all rows and columns with their exact values."
-            parser = LlamaParse(parsing_instruction=parsing_instruction, result_type="markdown")
+            # Use new parameter name to avoid deprecation warning
+            parser = LlamaParse(
+                complemental_formatting_instruction="Extract all data from this Excel file. Return all rows and columns with their exact values.",
+                result_type="markdown"
+            )
             
             # Save to temp file
             with open('/tmp/temp_excel.xlsx', 'wb') as f:
