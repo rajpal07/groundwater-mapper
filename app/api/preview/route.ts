@@ -114,7 +114,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
                 return NextResponse.json({
                     success: true,
-                    sheets: result.sheets || [],
+                    sheets: result.sheet_names || result.sheets || [],
                     columns: result.columns,
                     availableParameters: result.numeric_columns,
                     rowCount: result.row_count,

@@ -8,17 +8,57 @@ import { useAuth } from '@/lib/auth-context'
 interface PreviewData {
     sheets?: string[]
     sheetNames?: string[]
+    sheet_names?: string[]
+    SheetNames?: string[]
     columns: string[]
     availableParameters: string[]
     rowCount: number
     sampleData: any[]
 }
 
-// Vercel has a hard limit of 4.5MB for serverless function request bodies
-// Files larger than 4MB should be uploaded directly to Python service
-const VERCEL_SAFE_LIMIT = 4 * 1024 * 1024 // 4MB (slightly under 4.5MB limit)
+const VERCEL_SAFE_LIMIT = 4 * 1024 * 1024
 
-// Python service URL - will be fetched from API
+const uploadWithProgress = (
+    url: string,
+    body: FormData,
+    onProgress: (progress: number) => void
+): Promise<{ data: any; status: number }> => {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+
+        xhr.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable) {
+                const progress = Math.round((event.loaded / event.total) * 100)
+                onProgress(progress)
+            }
+        })
+
+        xhr.addEventListener('load', () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    const data = JSON.parse(xhr.responseText)
+                    resolve({ data, status: xhr.status })
+                } catch {
+                    resolve({ data: xhr.responseText, status: xhr.status })
+                }
+            } else {
+                reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.statusText}`))
+            }
+        })
+
+        xhr.addEventListener('error', () => {
+            reject(new Error('Upload failed - network error'))
+        })
+
+        xhr.addEventListener('abort', () => {
+            reject(new Error('Upload aborted'))
+        })
+
+        xhr.open('POST', url)
+        xhr.send(body)
+    })
+}
+
 const getPythonServiceUrl = async (): Promise<string | null> => {
     try {
         const response = await fetch('/api/preview')
@@ -48,38 +88,37 @@ export default function NewMapPage() {
     const [uploading, setUploading] = useState(false)
     const [previewData, setPreviewData] = useState<PreviewData | null>(null)
     const [loadingPreview, setLoadingPreview] = useState(false)
+    const [uploadProgressMsg, setUploadProgressMsg] = useState('')
+    const [uploadProgress, setUploadProgress] = useState(0)
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const selectedFile = e.target.files[0]
             setFile(selectedFile)
             setError('')
-
             if (!name) {
-                // Auto-fill name from filename
                 const fileName = selectedFile.name.replace(/\.[^/.]+$/, '')
                 setName(fileName)
             }
-
-            // Fetch preview data (columns, sheets) from the file
             await fetchPreviewData(selectedFile)
         }
     }
 
     const fetchPreviewData = async (fileToUpload: File, sheetName?: string) => {
         setLoadingPreview(true)
+        setUploadProgressMsg('Reading file locally...')
+        setUploadProgress(0)
         setPreviewData(null)
 
         try {
-            // Check if user is authenticated
             if (!user) {
                 throw new Error('You must be signed in to upload files')
             }
 
             const token = await user.getIdToken()
 
-            // Check if file is large - upload directly to Python service
             if (fileToUpload.size > VERCEL_SAFE_LIMIT) {
+                setUploadProgressMsg(`Uploading ${(fileToUpload.size / (1024 * 1024)).toFixed(1)}MB file to Python Service...`)
                 console.log('[Frontend] File is large (', fileToUpload.size, 'bytes), using direct Python service upload')
                 const pythonUrl = await getPythonServiceUrl()
 
@@ -89,24 +128,28 @@ export default function NewMapPage() {
 
                 console.log('[Frontend] Uploading directly to Python service:', pythonUrl)
 
-                // Upload directly to Python service
+                const baseUrl = pythonUrl.replace(/\/$/, '')
                 const formData = new FormData()
                 formData.append('file', fileToUpload)
                 formData.append('use_llamaparse', 'true')
                 if (sheetName) {
                     formData.append('sheet_name', sheetName)
                 }
-                const response = await fetch(`${pythonUrl}/preview`, {
-                    method: 'POST',
-                    body: formData
-                })
 
-                if (!response.ok) {
-                    const errorText = await response.text()
-                    throw new Error(`Python service error: ${errorText.substring(0, 100)}`)
+                const result = await uploadWithProgress(
+                    `${baseUrl}/preview`,
+                    formData,
+                    (progress) => {
+                        setUploadProgress(progress)
+                        setUploadProgressMsg(`Uploading: ${progress}%`)
+                    }
+                )
+
+                if (result.status >= 400) {
+                    throw new Error(`Python service error: ${String(result.data).substring(0, 100)}`)
                 }
 
-                const data = await response.json()
+                const data = result.data
                 console.log('[Frontend] Python service response:', data)
 
                 setPreviewData({
@@ -117,13 +160,11 @@ export default function NewMapPage() {
                     sampleData: data.preview || []
                 })
 
-                // Auto-select first sheet if available
                 const sheets = data.sheets || []
                 if (sheets.length > 0) {
                     setSelectedSheet(sheets[0])
                 }
 
-                // Auto-select first available parameter if any
                 if (data.numeric_columns && data.numeric_columns.length > 0) {
                     setParameter(data.numeric_columns[0])
                 } else if (data.columns && data.columns.length > 0) {
@@ -133,7 +174,7 @@ export default function NewMapPage() {
                 return
             }
 
-            // For smaller files, use the normal API route
+            setUploadProgressMsg('Sending file to API for preview...')
             const formData = new FormData()
             formData.append('file', fileToUpload)
             if (sheetName) {
@@ -148,29 +189,35 @@ export default function NewMapPage() {
                 body: formData
             })
 
-            // Handle 413 error - file too large
             if (response.status === 413) {
                 const data = await response.json()
                 if (data.requiresDirectUpload && data.pythonServiceUrl) {
+                    setUploadProgressMsg('Vercel limit reached. Retrying upload directly to Python service...')
                     console.log('[Frontend] Got 413, retrying with direct Python service upload')
-                    // Retry with direct upload to Python service
+
                     const pythonFormData = new FormData()
                     pythonFormData.append('file', fileToUpload)
                     pythonFormData.append('use_llamaparse', 'true')
                     if (sheetName) {
                         pythonFormData.append('sheet_name', sheetName)
                     }
-                    const pythonResponse = await fetch(`${data.pythonServiceUrl}/preview`, {
-                        method: 'POST',
-                        body: pythonFormData
-                    })
+                    const baseUrl = data.pythonServiceUrl.replace(/\/$/, '')
 
-                    if (!pythonResponse.ok) {
-                        const errorText = await pythonResponse.text()
+                    const result = await uploadWithProgress(
+                        `${baseUrl}/preview`,
+                        pythonFormData,
+                        (progress) => {
+                            setUploadProgress(progress)
+                            setUploadProgressMsg(`Uploading: ${progress}%`)
+                        }
+                    )
+
+                    if (result.status >= 400) {
+                        const errorText = String(result.data)
                         throw new Error(`Python service error: ${errorText.substring(0, 100)}`)
                     }
 
-                    const pythonData = await pythonResponse.json()
+                    const pythonData = result.data
                     setPreviewData({
                         sheets: pythonData.sheets || [],
                         columns: pythonData.columns || [],
@@ -200,13 +247,11 @@ export default function NewMapPage() {
             const data = await response.json()
             setPreviewData(data)
 
-            // Auto-select first sheet if available
             const sheets = data.sheets || data.sheetNames || []
             if (sheets.length > 0) {
                 setSelectedSheet(sheets[0])
             }
 
-            // Auto-select first available parameter if any
             if (data.availableParameters && data.availableParameters.length > 0) {
                 setParameter(data.availableParameters[0])
             } else if (data.columns && data.columns.length > 0) {
@@ -218,13 +263,15 @@ export default function NewMapPage() {
             setError(err instanceof Error ? err.message : 'Failed to read file')
         } finally {
             setLoadingPreview(false)
+            setUploadProgressMsg('')
+            setUploadProgress(0)
         }
     }
 
     const handleSheetChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newSheet = e.target.value
         setSelectedSheet(newSheet)
-        setParameter('') // Reset parameter when sheet changes
+        setParameter('')
         if (file) {
             await fetchPreviewData(file, newSheet)
         }
@@ -252,14 +299,12 @@ export default function NewMapPage() {
         setError('')
 
         try {
-            // Check if user is authenticated
             if (!user) {
                 throw new Error('You must be signed in to create maps')
             }
 
             const token = await user.getIdToken()
 
-            // Step 1: Create the map first
             const createResponse = await fetch(`/api/projects/${projectId}/maps`, {
                 method: 'POST',
                 headers: {
@@ -277,10 +322,8 @@ export default function NewMapPage() {
             const mapData = await createResponse.json()
             const mapId = mapData.id
 
-            // Step 2: Upload the file
             setUploading(true)
 
-            // Check if file is large - upload directly to Python service
             if (file.size > VERCEL_SAFE_LIMIT) {
                 console.log('[Frontend] File is large for processing, using direct Python service upload')
                 const pythonUrl = await getPythonServiceUrl()
@@ -296,7 +339,8 @@ export default function NewMapPage() {
                 formData.append('parameter', parameter)
                 formData.append('colormap', colormap)
 
-                const processResponse = await fetch(`${pythonUrl}/process`, {
+                const baseUrl = pythonUrl.replace(/\/$/, '')
+                const processResponse = await fetch(`${baseUrl}/process`, {
                     method: 'POST',
                     body: formData
                 })
@@ -309,14 +353,10 @@ export default function NewMapPage() {
                 const result = await processResponse.json()
                 console.log('[Frontend] Python process result:', result)
 
-                // TODO: Save result to Firebase via API
-
-                // Redirect to the map detail page
                 router.push(`/dashboard/projects/${projectId}/maps/${mapId}`)
                 return
             }
 
-            // For smaller files, use the normal API route
             const formData = new FormData()
             formData.append('file', file)
             formData.append('mapId', mapId)
@@ -335,7 +375,6 @@ export default function NewMapPage() {
                 body: formData
             })
 
-            // Handle 413 error - file too large
             if (uploadResponse.status === 413) {
                 const data = await uploadResponse.json()
                 if (data.requiresDirectUpload && data.pythonServiceUrl) {
@@ -346,7 +385,8 @@ export default function NewMapPage() {
                     pythonFormData.append('parameter', parameter)
                     pythonFormData.append('colormap', colormap)
 
-                    const pythonResponse = await fetch(`${data.pythonServiceUrl}/process`, {
+                    const baseUrl = data.pythonServiceUrl.replace(/\/$/, '')
+                    const pythonResponse = await fetch(`${baseUrl}/process`, {
                         method: 'POST',
                         body: pythonFormData
                     })
@@ -356,7 +396,6 @@ export default function NewMapPage() {
                         throw new Error(`Python service error: ${errorText.substring(0, 100)}`)
                     }
 
-                    // Success - redirect to map detail page
                     router.push(`/dashboard/projects/${projectId}/maps/${mapId}`)
                     return
                 }
@@ -368,7 +407,6 @@ export default function NewMapPage() {
                 throw new Error(data.error || 'Failed to process file')
             }
 
-            // Redirect to the map detail page
             router.push(`/dashboard/projects/${projectId}/maps/${mapId}`)
         } catch (err) {
             console.error('Error creating map:', err)
@@ -379,8 +417,7 @@ export default function NewMapPage() {
         }
     }
 
-    // Get sheets from preview data
-    const sheets = previewData?.sheets || previewData?.sheetNames || []
+    const sheets = previewData?.sheets || previewData?.sheetNames || previewData?.sheet_names || previewData?.SheetNames || []
     const isExcelFile = file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))
     const showSheetDropdown = isExcelFile && sheets.length > 1
 
@@ -452,12 +489,28 @@ export default function NewMapPage() {
                 </div>
 
                 {loadingPreview && (
-                    <div className="mb-6 text-center py-4 bg-gray-50 rounded-lg">
-                        <svg className="animate-spin w-6 h-6 text-primary mx-auto mb-2" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <p className="text-gray-600">Reading file...</p>
+                    <div className="mb-6 py-4 bg-gray-50 rounded-lg">
+                        <div className="text-center mb-3">
+                            <svg className="animate-spin w-6 h-6 text-primary mx-auto mb-2" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <p className="text-gray-600">{uploadProgressMsg || 'Reading file...'}</p>
+                        </div>
+                        {uploadProgress > 0 && (
+                            <div className="mx-auto max-w-xs">
+                                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                    <span>Upload Progress</span>
+                                    <span>{uploadProgress}%</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                    <div
+                                        className="bg-primary h-2.5 rounded-full transition-all duration-300 ease-out"
+                                        style={{ width: `${uploadProgress}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -471,7 +524,7 @@ export default function NewMapPage() {
                             required
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary transition-colors"
                         >
-                            {sheets.map((sheet) => (
+                            {sheets.map((sheet: string) => (
                                 <option key={sheet} value={sheet}>
                                     {sheet}
                                 </option>

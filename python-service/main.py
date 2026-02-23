@@ -22,6 +22,24 @@ import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+    # Try to load from various locations
+    env_paths = [
+        os.path.join(os.path.dirname(__file__), '.env'),
+        os.path.join(os.path.dirname(__file__), '.env.local'),
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'),
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env.local'),
+    ]
+    for env_path in env_paths:
+        if os.path.exists(env_path):
+            load_dotenv(env_path)
+            print(f"Loaded environment from {env_path}")
+            break
+except ImportError:
+    print("dotenv not installed, using system environment variables")
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -109,7 +127,8 @@ Supported interpolation methods:
 
 # Configure CORS
 import re
-allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,https://groundwater-mapper.vercel.app").split(",")
+# Default origins include localhost and all groundwater-mapper Vercel deployments (including preview branches)
+allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,https://groundwater-mapperpushed.vercel.app,https://groundwater-mapper-pushed.vercel.app").split(",")
 allowed_origins = []
 allowed_origin_regexes = []
 

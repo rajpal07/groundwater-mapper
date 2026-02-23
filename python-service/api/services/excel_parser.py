@@ -46,7 +46,7 @@ class ExcelParserService:
         Args:
             file_content: Raw file bytes
             filename: Original filename for extension detection
-            use_llamaparse: Whether to try LlamaParse first
+            use_llamaparse: Whether to try LlamaParse (default True for AI-powered parsing)
             sheet_name: Specific sheet to parse (None for first sheet)
             
         Returns:
@@ -221,7 +221,7 @@ def parse_excel_file(
     Args:
         file_content: Raw file bytes
         filename: Original filename
-        use_llamaparse: Whether to try LlamaParse
+        use_llamaparse: Whether to try LlamaParse (default True)
         sheet_name: Specific sheet to parse
         
     Returns:

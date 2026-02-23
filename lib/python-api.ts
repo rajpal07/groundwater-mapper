@@ -99,7 +99,8 @@ async function makeRequest<T>(
         requestHeaders['Authorization'] = `Bearer ${token}`
     }
 
-    const response = await fetch(`${PYTHON_SERVICE_URL}${endpoint}`, {
+    const baseUrl = PYTHON_SERVICE_URL.replace(/\/$/, '')
+    const response = await fetch(`${baseUrl}${endpoint}`, {
         method,
         headers: requestHeaders,
         body,

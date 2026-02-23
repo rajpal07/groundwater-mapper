@@ -15,5 +15,5 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: ALLOWED_ORIGINS
-        value: https://groundwater-mapper.vercel.app,https://groundwater-mapper-*.vercel.app
+        value: http://localhost:3000,https://groundwater-mapperpushed.vercel.app,https://groundwater-mapper-pushed.vercel.app,https://groundwater-mapper-*.vercel.app
     healthCheckPath: /health

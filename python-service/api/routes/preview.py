@@ -24,6 +24,7 @@ router = APIRouter(prefix="/preview", tags=["Preview"])
 async def preview_excel(
     file: UploadFile = File(..., description="Excel file to preview"),
     sheet_name: Optional[str] = Form(None, description="Sheet name to preview (optional)"),
+    use_llamaparse: Optional[str] = Form("true", description="Whether to use LlamaParse (default true)"),
     user: Optional[dict] = Depends(get_current_user_optional)
 ) -> PreviewResponse:
     """
@@ -38,6 +39,9 @@ async def preview_excel(
     
     This endpoint is used to help users select the correct columns for map generation.
     """
+    # Convert use_llamaparse string to boolean
+    use_llamaparse_bool = use_llamaparse.lower() in ('true', '1', 'yes') if use_llamaparse else False
+    
     # Validate file type
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
@@ -60,7 +64,7 @@ async def preview_excel(
     
     # Parse Excel file
     try:
-        df = excel_parser.parse_file(content, filename=file.filename, sheet_name=sheet_name)
+        df = excel_parser.parse_file(content, filename=file.filename, sheet_name=sheet_name, use_llamaparse=use_llamaparse_bool)
     except Exception as e:
         logger.error(f"Error parsing Excel file: {e}")
         raise HTTPException(status_code=422, detail=f"Error parsing Excel file: {str(e)}")
