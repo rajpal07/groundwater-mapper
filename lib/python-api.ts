@@ -163,6 +163,7 @@ export interface PreviewResponse {
         utm_zone?: number
         utm_hemisphere?: string
     }
+    needs_sheet_selection?: boolean
 }
 
 /**
