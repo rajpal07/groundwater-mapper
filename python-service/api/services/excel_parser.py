@@ -89,7 +89,11 @@ class ExcelParserService:
         
         try:
             # Use SimpleDirectoryReader with LlamaParse - same as Streamlit
-            from llama_index.core import SimpleDirectoryReader
+            # Note: In llama-index 0.9.x, SimpleDirectoryReader moved to llama_index.core.readers
+            try:
+                from llama_index.core.readers import SimpleDirectoryReader
+            except ImportError:
+                from llama_index.core import SimpleDirectoryReader
             
             parser = LlamaParse(
                 api_key=self.llama_cloud_api_key,
