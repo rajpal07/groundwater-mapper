@@ -62,9 +62,13 @@ async def preview_excel(
         logger.error(f"Error reading file: {e}")
         raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
     
-    # Parse Excel file
+    # Parse Excel file - Use pandas for initial detection, LlamaParse only when sheet is selected
+    # If sheet_name is provided, use LlamaParse for that specific sheet
+    # If no sheet_name (first upload), use pandas only to detect sheets
+    use_llamaparse_for_parsing = sheet_name is not None and use_llamaparse_bool
+    
     try:
-        df = excel_parser.parse_file(content, filename=file.filename, sheet_name=sheet_name, use_llamaparse=use_llamaparse_bool)
+        df = excel_parser.parse_file(content, filename=file.filename, sheet_name=sheet_name, use_llamaparse=use_llamaparse_for_parsing)
     except Exception as e:
         logger.error(f"Error parsing Excel file: {e}")
         raise HTTPException(status_code=422, detail=f"Error parsing Excel file: {str(e)}")
