@@ -152,6 +152,7 @@ export async function checkHealth(): Promise<HealthResponse> {
 export interface PreviewResponse {
     success: boolean
     sheets?: string[]
+    sheet_names?: string[]
     columns: string[]
     numeric_columns: string[]
     row_count: number
