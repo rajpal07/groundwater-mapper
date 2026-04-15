@@ -21,7 +21,7 @@ except (ImportError, AttributeError):
     pass
 # -----------------------------------------------------------------
 
-import geemap.foliumap as geemap_folium 
+
 
 import folium
 from folium.raster_layers import ImageOverlay
@@ -105,7 +105,7 @@ def create_map(image_base64, image_bounds, target_points, kmz_points=None, bbox_
 
         
         # Patch the module we interact with directly
-        geemap_folium.ee_initialize = lambda *args, **kwargs: None
+ 
         
     except Exception as e:
         print(f"Earth Engine not active, attempting default initialization: {e}")
